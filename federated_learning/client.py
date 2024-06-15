@@ -4,7 +4,7 @@ class FederatedClient:
         self.data = data
         self.model = model
 
-    def train_local_model(self, epochs=1, callbacks=None):
+    def train_local_model(self, epochs=1, callbacks=None, validation_data=None):
         X_train, y_train = self.data
-        self.model.fit(X_train, y_train, epochs=epochs, callbacks=callbacks)
+        self.model.fit(X_train, y_train, epochs=epochs, callbacks=callbacks, validation_data=validation_data)
         return self.model
