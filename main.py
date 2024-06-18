@@ -47,12 +47,26 @@ clients = [FederatedClient((X_train, y_train), create_model(X_train.shape[1])) f
 # Train local models with early stopping
 early_stopping = EarlyStopping(monitor='val_loss', patience=3)
 logger.info("Starting training for federated clients.")
-histories = [client.train_local_model(epochs=5, callbacks=[early_stopping], validation_data=(X_val, y_val)) for client in clients]
+histories = []
+for client_id, client in enumerate(clients):
+    logger.info(f"Training client {client_id + 1}")
+    history = client.train_local_model(epochs=5, callbacks=[early_stopping], validation_data=(X_val, y_val))
+    histories.append(history)
+    logger.info(f"Client {client_id + 1} training completed.")
 
 # Initialize central aggregator and aggregate models
 aggregator = CentralAggregator(create_model(X_train.shape[1]))
+logger.info("Starting model aggregation.")
 global_model = aggregator.aggregate_models([client.model for client in clients])
 logger.info("Model aggregation completed.")
+
+# Validate global model on the validation set
+val_loss, val_accuracy = global_model.evaluate(X_val, y_val)
+logger.info(f'Validation Accuracy after aggregation: {val_accuracy:.2f}')
+
+# Evaluate the global model
+loss, accuracy = global_model.evaluate(X_test, y_test)
+logger.info(f'Test Accuracy after aggregation: {accuracy:.2f}')
 
 # Initialize blockchain
 blockchain = Blockchain()
@@ -75,9 +89,9 @@ adversarial_training = AdversarialTraining(global_model)
 adversarial_training.apply_adversarial_training(X_train, y_train)
 logger.info("Security enhancements applied.")
 
-# Evaluate the global model
+# Evaluate the global model again after security enhancements
 loss, accuracy = global_model.evaluate(X_test, y_test)
-logger.info(f'Test Accuracy: {accuracy:.2f}')
+logger.info(f'Test Accuracy after security enhancements: {accuracy:.2f}')
 
 # Create directory for plots
 plot_dir = 'plots'
