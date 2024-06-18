@@ -3,7 +3,7 @@ scikit-learn
 tensorflow
 py-solc-x
 web3
-matlibplotpip install py-solc-x
+matlibplotpip 
 NumPy
 scikit-learn
 seaborn

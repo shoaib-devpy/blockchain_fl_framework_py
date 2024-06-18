@@ -16,17 +16,35 @@ with Diagram("Federated Learning and Blockchain Process", show=False):
         load_data >> preprocess_data
 
     with Cluster("Federated Learning"):
-        clients = [Server("Client 1"),
-                   Server("Client 2"),
-                   Server("Client 3"),
-                   Server("Client 4"),
-                   Server("Client 5")]
-        train_local_models = Action("Train Local Models")
+        client1 = Server("Client 1")
+        client2 = Server("Client 2")
+        client3 = Server("Client 3")
+        client4 = Server("Client 4")
+        client5 = Server("Client 5")
+        train_local_model_client1 = Action("Train Local Model (Client 1)")
+        train_local_model_client2 = Action("Train Local Model (Client 2)")
+        train_local_model_client3 = Action("Train Local Model (Client 3)")
+        train_local_model_client4 = Action("Train Local Model (Client 4)")
+        train_local_model_client5 = Action("Train Local Model (Client 5)")
         aggregate_models = Action("Aggregate Models")
         
-        preprocess_data >> train_local_models
-        train_local_models >> clients
-        clients >> aggregate_models
+        preprocess_data >> train_local_model_client1
+        preprocess_data >> train_local_model_client2
+        preprocess_data >> train_local_model_client3
+        preprocess_data >> train_local_model_client4
+        preprocess_data >> train_local_model_client5
+
+        train_local_model_client1 >> client1
+        train_local_model_client2 >> client2
+        train_local_model_client3 >> client3
+        train_local_model_client4 >> client4
+        train_local_model_client5 >> client5
+
+        client1 >> aggregate_models
+        client2 >> aggregate_models
+        client3 >> aggregate_models
+        client4 >> aggregate_models
+        client5 >> aggregate_models
 
     with Cluster("Blockchain"):
         blockchain = Custom("Blockchain", "./icons/blockchain.png")
