@@ -1,3 +1,9 @@
 pandas
 scikit-learn
 tensorflow
+py-solc-x
+web3
+matlibplotpip install py-solc-x
+NumPy
+scikit-learn
+seaborn

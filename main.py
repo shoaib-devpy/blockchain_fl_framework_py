@@ -96,3 +96,23 @@ for i, feature_name in enumerate(feature_names):
 
 anomalies = X_train[anomaly_detection.detect(X_train) == -1]
 plot_anomaly_detection(X_train, anomalies, os.path.join(plot_dir, 'anomaly_detection.png'))
+
+# Function to retrieve and print block details
+def retrieve_and_print_block_details(blockchain, block_hash, block_index):
+    block_by_hash = blockchain.get_block_by_hash(block_hash)
+    block_by_index = blockchain.get_block_by_index(block_index)
+
+    if block_by_hash:
+        logger.info(f"Block by hash: {block_by_hash}")
+    else:
+        logger.info(f"No block found with hash: {block_hash}")
+
+    if block_by_index:
+        logger.info(f"Block by index: {block_by_index}")
+    else:
+        logger.info(f"No block found with index: {block_index}")
+
+# Retrieve and print block details for verification
+block_hash = blockchain.chain[-1].hash  # Replace with the hash of the block you want to retrieve
+block_index = blockchain.chain[-1].index  # Replace with the index of the block you want to retrieve
+retrieve_and_print_block_details(blockchain, block_hash, block_index)
