@@ -67,10 +67,25 @@ with Diagram("Federated Learning and Blockchain Process", show=False):
 
     with Cluster("Evaluation"):
         evaluate_model = Action("Evaluate Model")
+        calculate_metrics = Action("Calculate Metrics")
+        tp = Custom("True Positives (TP)", "./icons/tp.png")
+        fp = Custom("False Positives (FP)", "./icons/fp.png")
+        fn = Custom("False Negatives (FN)", "./icons/fn.png")
+        tn = Custom("True Negatives (TN)", "./icons/tn.png")
+        recall = Custom("Recall", "./icons/recall.png")
+        precision = Custom("Precision", "./icons/precision.png")
+        f1_score = Custom("F1-Score", "./icons/f1_score.png")
         visualize_results = Custom("Visualize Results", "./icons/visualize_results.png")
         
-        adversarial_training >> evaluate_model
-        evaluate_model >> visualize_results
+        adversarial_training >> evaluate_model >> calculate_metrics
+        calculate_metrics >> tp
+        calculate_metrics >> fp
+        calculate_metrics >> fn
+        calculate_metrics >> tn
+        calculate_metrics >> recall
+        calculate_metrics >> precision
+        calculate_metrics >> f1_score
+        f1_score >> visualize_results
 
     with Cluster("Visualization"):
         plot_training_history = Custom("Plot Training History", "./icons/plot_training_history.png")

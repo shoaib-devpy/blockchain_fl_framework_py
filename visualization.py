@@ -61,13 +61,13 @@ def plot_anomaly_detection(data, anomalies, save_path):
     plt.savefig(save_path)
     plt.close()
 
-def plot_client_data_distribution(X_train, y_train, save_path):
-    plt.figure()
-    sns.histplot(X_train[:, 0], kde=True, label='Feature 1')
-    sns.histplot(X_train[:, 1], kde=True, label='Feature 2')
+def plot_client_data_distribution(X_train, y_train, feature_indices, save_path):
+    plt.figure(figsize=(10, 7))
+    plt.scatter(X_train[y_train == 0, feature_indices[0]], X_train[y_train == 0, feature_indices[1]], label='Class 0')
+    plt.scatter(X_train[y_train == 1, feature_indices[0]], X_train[y_train == 1, feature_indices[1]], label='Class 1', color='r')
     plt.title('Client Data Distribution')
-    plt.xlabel('Value')
-    plt.ylabel('Frequency')
+    plt.xlabel(f'Feature {feature_indices[0] + 1}')
+    plt.ylabel(f'Feature {feature_indices[1] + 1}')
     plt.legend()
     plt.savefig(save_path)
     plt.close()
@@ -76,7 +76,7 @@ def plot_client_model_performance(history, save_path):
     plt.figure()
     plt.plot(history.history['accuracy'], label='Training Accuracy')
     plt.plot(history.history['val_accuracy'], label='Validation Accuracy')
-    plt.title('Client Model Performance')
+    plt.title('Model Accuracy')
     plt.ylabel('Accuracy')
     plt.xlabel('Epoch')
     plt.legend(loc='upper left')
