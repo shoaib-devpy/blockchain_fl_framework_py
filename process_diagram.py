@@ -12,8 +12,13 @@ with Diagram("Federated Learning and Blockchain Process", show=False):
     
     with Cluster("Data Preprocessing"):
         load_data = Custom("Load Data", "./icons/load_data.png")
+        clean_data = Custom("Clean Data", "./icons/clean_data.png")
+        normalize_data = Custom("Normalize Data", "./icons/normalize_data.png")
+        feature_engineering = Custom("Feature Engineering", "./icons/feature_engineering.png")
         preprocess_data = Custom("Preprocess Data", "./icons/preprocess_data.png")
-        load_data >> preprocess_data
+        partition_data = Custom("Partition Data", "./icons/partition_data.png")
+        
+        load_data >> clean_data >> normalize_data >> feature_engineering >> preprocess_data >> partition_data
 
     with Cluster("Federated Learning"):
         client1 = Server("Client 1")
@@ -28,11 +33,11 @@ with Diagram("Federated Learning and Blockchain Process", show=False):
         train_local_model_client5 = Action("Train Local Model (Client 5)")
         aggregate_models = Action("Aggregate Models")
         
-        preprocess_data >> train_local_model_client1
-        preprocess_data >> train_local_model_client2
-        preprocess_data >> train_local_model_client3
-        preprocess_data >> train_local_model_client4
-        preprocess_data >> train_local_model_client5
+        partition_data >> train_local_model_client1
+        partition_data >> train_local_model_client2
+        partition_data >> train_local_model_client3
+        partition_data >> train_local_model_client4
+        partition_data >> train_local_model_client5
 
         train_local_model_client1 >> client1
         train_local_model_client2 >> client2
@@ -66,3 +71,20 @@ with Diagram("Federated Learning and Blockchain Process", show=False):
         
         adversarial_training >> evaluate_model
         evaluate_model >> visualize_results
+
+    with Cluster("Visualization"):
+        plot_training_history = Custom("Plot Training History", "./icons/plot_training_history.png")
+        plot_global_model_performance = Custom("Plot Global Model Performance", "./icons/plot_global_model_performance.png")
+        plot_confusion_matrix = Custom("Plot Confusion Matrix", "./icons/plot_confusion_matrix.png")
+        plot_feature_distribution = Custom("Plot Feature Distribution", "./icons/plot_feature_distribution.png")
+        plot_anomaly_detection = Custom("Plot Anomaly Detection", "./icons/plot_anomaly_detection.png")
+        plot_client_data_distribution = Custom("Plot Client Data Distribution", "./icons/plot_client_data_distribution.png")
+        plot_client_model_performance = Custom("Plot Client Model Performance", "./icons/plot_client_model_performance.png")
+        
+        visualize_results >> plot_training_history
+        visualize_results >> plot_global_model_performance
+        visualize_results >> plot_confusion_matrix
+        visualize_results >> plot_feature_distribution
+        visualize_results >> plot_anomaly_detection
+        visualize_results >> plot_client_data_distribution
+        visualize_results >> plot_client_model_performance

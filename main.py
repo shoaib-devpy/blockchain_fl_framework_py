@@ -4,34 +4,47 @@ matplotlib.use('Agg')  # Use a non-interactive backend
 
 import logging
 import os
-from utils.data_preprocessing import load_and_preprocess_data
+from utils.data_preprocessing import load_and_preprocess_data, partition_data_for_clients, prepare_client_data
 from federated_learning.client import FederatedClient
 from federated_learning.aggregator import CentralAggregator
 from blockchain.blockchain import Blockchain
 from blockchain.smart_contract import SmartContract
 from security.anomaly_detection import AnomalyDetection
 from security.adversarial_training import AdversarialTraining
-from visualization import plot_training_history, plot_global_model_performance, plot_confusion_matrix, plot_feature_distribution, plot_anomaly_detection
+from visualization import (plot_training_history, plot_global_model_performance, 
+                           plot_confusion_matrix, plot_feature_distribution, 
+                           plot_anomaly_detection, plot_client_data_distribution,
+                           plot_client_model_performance)
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense, Input, Dropout
 from tensorflow.keras.callbacks import EarlyStopping
-from sklearn.model_selection import train_test_split
 import numpy as np
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Load and preprocess data
-X_train, X_test, y_train, y_test = load_and_preprocess_data('data/credit_card_2023.csv')
+# Create directory for client data if it does not exist
+os.makedirs('data', exist_ok=True)
 
-# Split training data into training and validation sets
-X_train, X_val, y_train, y_val = train_test_split(X_train, y_train, test_size=0.2, random_state=42)
+# Load and preprocess data
+df = load_and_preprocess_data('data/credit_card_2023.csv')
+
+# Partition data for clients
+n_clients = 5
+client_data = partition_data_for_clients(df, n_clients)
+
+# Save client-specific datasets
+for i, client_df in enumerate(client_data):
+    client_df.to_csv(f'data/client_{i+1}_data.csv', index=False)
+
+# Prepare client-specific datasets
+client_partitions = prepare_client_data(client_data)
 
 # Define a simple model
 def create_model(input_shape):
     model = Sequential([
-        Input(shape=(input_shape,)),  # Corrected this line to pass shape as a tuple
+        Input(shape=(input_shape,)),
         Dense(64, activation='relu'),
         Dropout(0.5),
         Dense(64, activation='relu'),
@@ -42,15 +55,16 @@ def create_model(input_shape):
     return model
 
 # Initialize federated learning clients
-clients = [FederatedClient((X_train, y_train), create_model(X_train.shape[1])) for _ in range(5)]
+clients = [FederatedClient((X_train, y_train), create_model(X_train.shape[1])) for (X_train, X_test, y_train, y_test) in client_partitions]
 
 # Train local models with early stopping
 early_stopping = EarlyStopping(monitor='val_loss', patience=3)
 logger.info("Starting training for federated clients.")
 histories = []
 for client_id, client in enumerate(clients):
+    X_train, X_test, y_train, y_test = client_partitions[client_id]
     logger.info(f"Training client {client_id + 1}")
-    history = client.train_local_model(epochs=5, callbacks=[early_stopping], validation_data=(X_val, y_val))
+    history = client.train_local_model(epochs=20, callbacks=[early_stopping], validation_data=(X_test, y_test))
     histories.append(history)
     logger.info(f"Client {client_id + 1} training completed.")
 
@@ -60,11 +74,12 @@ logger.info("Starting model aggregation.")
 global_model = aggregator.aggregate_models([client.model for client in clients])
 logger.info("Model aggregation completed.")
 
-# Validate global model on the validation set
-val_loss, val_accuracy = global_model.evaluate(X_val, y_val)
+# Validate global model on the validation set of the first client (or any chosen validation set)
+X_train, X_test, y_train, y_test = client_partitions[0]
+val_loss, val_accuracy = global_model.evaluate(X_test, y_test)
 logger.info(f'Validation Accuracy after aggregation: {val_accuracy:.2f}')
 
-# Evaluate the global model
+# Evaluate the global model on the test set of the first client (or any chosen test set)
 loss, accuracy = global_model.evaluate(X_test, y_test)
 logger.info(f'Test Accuracy after aggregation: {accuracy:.2f}')
 
@@ -98,7 +113,7 @@ plot_dir = 'plots'
 os.makedirs(plot_dir, exist_ok=True)
 
 # Visualizations
-client_accuracies = [client.model.evaluate(X_test, y_test)[1] for client in clients]
+client_accuracies = [client.model.evaluate(client_partitions[i][1], client_partitions[i][3])[1] for i, client in enumerate(clients)]
 plot_training_history(histories, os.path.join(plot_dir, 'training_history.png'))
 plot_global_model_performance(accuracy, client_accuracies, os.path.join(plot_dir, 'global_model_performance.png'))
 plot_confusion_matrix(y_test, (global_model.predict(X_test) > 0.5).astype("int32"), os.path.join(plot_dir, 'confusion_matrix.png'))
@@ -110,6 +125,11 @@ for i, feature_name in enumerate(feature_names):
 
 anomalies = X_train[anomaly_detection.detect(X_train) == -1]
 plot_anomaly_detection(X_train, anomalies, os.path.join(plot_dir, 'anomaly_detection.png'))
+
+# New visualizations for client data and performance
+for i, (X_train, X_test, y_train, y_test) in enumerate(client_partitions):
+    plot_client_data_distribution(X_train, y_train, os.path.join(plot_dir, f'client_{i+1}_data_distribution.png'))
+    plot_client_model_performance(histories[i], os.path.join(plot_dir, f'client_{i+1}_model_performance.png'))
 
 # Function to retrieve and print block details
 def retrieve_and_print_block_details(blockchain, block_hash, block_index):
