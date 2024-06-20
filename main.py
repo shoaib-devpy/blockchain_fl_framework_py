@@ -1,4 +1,3 @@
-# main.py
 import matplotlib
 matplotlib.use('Agg')  # Use a non-interactive backend
 
@@ -20,6 +19,7 @@ from tensorflow.keras.layers import Dense, Input, Dropout
 from tensorflow.keras.callbacks import EarlyStopping
 from sklearn.metrics import confusion_matrix, recall_score, precision_score, f1_score
 import numpy as np
+import tensorflow as tf
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -69,11 +69,20 @@ for client_id, client in enumerate(clients):
     histories.append(history)
     logger.info(f"Client {client_id + 1} training completed.")
 
-# Initialize central aggregator and aggregate models
-aggregator = CentralAggregator(create_model(X_train.shape[1]))
-logger.info("Starting model aggregation.")
-global_model = aggregator.aggregate_models([client.model for client in clients])
-logger.info("Model aggregation completed.")
+# Prepare models and training data for aggregation
+client_models_data = [{'model': client.model, 'train_data': client.train_data} for client in clients]
+
+# Aggregation and evaluation for FedAvg
+aggregator_fedavg = CentralAggregator(create_model(X_train.shape[1]))
+logger.info("Starting model aggregation using FedAvg.")
+global_model_fedavg = aggregator_fedavg.aggregate_models(client_models_data, method='fedavg')
+logger.info("Model aggregation using FedAvg completed.")
+
+# Aggregation and evaluation for FedSGD
+aggregator_fedsgd = CentralAggregator(create_model(X_train.shape[1]))
+logger.info("Starting model aggregation using FedSGD.")
+global_model_fedsgd = aggregator_fedsgd.aggregate_models(client_models_data, method='fedsgd')
+logger.info("Model aggregation using FedSGD completed.")
 
 # Function to calculate evaluation metrics
 def calculate_metrics(y_true, y_pred):
@@ -89,19 +98,37 @@ def calculate_metrics(y_true, y_pred):
 
     return tp, fp, fn, tn, recall, precision, f1
 
-# Validate global model on the validation set of the first client (or any chosen validation set)
+# Validate global models on the validation set of the first client (or any chosen validation set)
 X_train, X_test, y_train, y_test = client_partitions[0]
-y_pred = (global_model.predict(X_test) > 0.5).astype("int32")
-tp, fp, fn, tn, recall, precision, f1 = calculate_metrics(y_test, y_pred)
-global_accuracy = recall  # assuming we want to use recall as the global accuracy measure
-logger.info(f'Validation Metrics after aggregation: TP={tp}, FP={fp}, FN={fn}, TN={tn}, Recall={recall:.2f}, Precision={precision:.2f}, F1-Score={f1:.2f}')
 
-# Evaluate the global model on the test set of the first client (or any chosen test set)
-y_pred = (global_model.predict(X_test) > 0.5).astype("int32")
-tp, fp, fn, tn, recall, precision, f1 = calculate_metrics(y_test, y_pred)
-global_accuracy = recall  # assuming we want to use recall as the global accuracy measure
-logger.info(f'Test Metrics after aggregation: TP={tp}, FP={fp}, FN={fn}, TN={tn}, Recall={recall:.2f}, Precision={precision:.2f}, F1-Score={f1:.2f}')
+# Evaluate FedAvg model
+y_pred_fedavg = (global_model_fedavg.predict(X_test) > 0.5).astype("int32")
+tp, fp, fn, tn, recall, precision, f1 = calculate_metrics(y_test, y_pred_fedavg)
+logger.info(f'FedAvg Validation Metrics: TP={tp}, FP={fp}, FN={fn}, TN={tn}, Recall={recall:.2f}, Precision={precision:.2f}, F1-Score={f1:.2f}')
 
+# Evaluate FedSGD model
+y_pred_fedsgd = (global_model_fedsgd.predict(X_test) > 0.5).astype("int32")
+tp, fp, fn, tn, recall, precision, f1 = calculate_metrics(y_test, y_pred_fedsgd)
+logger.info(f'FedSGD Validation Metrics: TP={tp}, FP={fp}, FN={fn}, TN={tn}, Recall={recall:.2f}, Precision={precision:.2f}, F1-Score={f1:.2f}')
+
+# Plot training histories
+plot_dir = 'plots'
+os.makedirs(plot_dir, exist_ok=True)
+plot_training_history(histories, os.path.join(plot_dir, 'training_history.png'), title='Training History for Clients')
+
+# Plot FedAvg vs FedSGD performance
+client_accuracies_fedavg = [client.model.evaluate(client_partitions[i][1], client_partitions[i][3])[1] for i, client in enumerate(clients)]
+client_accuracies_fedsgd = [client.model.evaluate(client_partitions[i][1], client_partitions[i][3])[1] for i, client in enumerate(clients)]
+plot_global_model_performance(global_model_fedavg.evaluate(X_test, y_test)[1], client_accuracies_fedavg, os.path.join(plot_dir, 'global_model_performance_fedavg.png'), title='Global Model vs Client Models Performance (FedAvg)')
+plot_global_model_performance(global_model_fedsgd.evaluate(X_test, y_test)[1], client_accuracies_fedsgd, os.path.join(plot_dir, 'global_model_performance_fedsgd.png'), title='Global Model vs Client Models Performance (FedSGD)')
+
+# Plot confusion matrices
+plot_confusion_matrix(y_test, y_pred_fedavg, os.path.join(plot_dir, 'confusion_matrix_fedavg.png'), title='Confusion Matrix (FedAvg)')
+plot_confusion_matrix(y_test, y_pred_fedsgd, os.path.join(plot_dir, 'confusion_matrix_fedsgd.png'), title='Confusion Matrix (FedSGD)')
+plot_normalized_confusion_matrix(y_test, y_pred_fedavg, os.path.join(plot_dir, 'normalized_confusion_matrix_fedavg.png'), title='Normalized Confusion Matrix (FedAvg)')
+plot_normalized_confusion_matrix(y_test, y_pred_fedsgd, os.path.join(plot_dir, 'normalized_confusion_matrix_fedsgd.png'), title='Normalized Confusion Matrix (FedSGD)')
+
+# Blockchain and security steps remain the same
 # Initialize blockchain
 blockchain = Blockchain()
 logger.info("Blockchain initialized.")
@@ -119,25 +146,18 @@ smart_contract.print_ledger()
 # Initialize security modules
 anomaly_detection = AnomalyDetection()
 anomaly_detection.train(X_train)
-adversarial_training = AdversarialTraining(global_model)
+adversarial_training = AdversarialTraining(global_model_fedavg)  # Assuming using the FedAvg model for adversarial training
 adversarial_training.apply_adversarial_training(X_train, y_train)
 logger.info("Security enhancements applied.")
 
 # Evaluate the global model again after security enhancements
-y_pred_enhanced = (global_model.predict(X_test) > 0.5).astype("int32")
+y_pred_enhanced = (global_model_fedavg.predict(X_test) > 0.5).astype("int32")
 tp, fp, fn, tn, recall, precision, f1 = calculate_metrics(y_test, y_pred_enhanced)
 logger.info(f'Test Metrics after security enhancements: TP={tp}, FP={fp}, FN={fn}, TN={tn}, Recall={recall:.2f}, Precision={precision:.2f}, F1-Score={f1:.2f}')
 
-# Create directory for plots
-plot_dir = 'plots'
-os.makedirs(plot_dir, exist_ok=True)
-
-# Visualizations
-client_accuracies = [client.model.evaluate(client_partitions[i][1], client_partitions[i][3])[1] for i, client in enumerate(clients)]
-plot_training_history(histories, os.path.join(plot_dir, 'training_history.png'))
-plot_global_model_performance(global_accuracy, client_accuracies, os.path.join(plot_dir, 'global_model_performance.png'))
-plot_confusion_matrix(y_test, (global_model.predict(X_test) > 0.5).astype("int32"), os.path.join(plot_dir, 'confusion_matrix.png'))
-plot_normalized_confusion_matrix(y_test, (global_model.predict(X_test) > 0.5).astype("int32"), os.path.join(plot_dir, 'normalized_confusion_matrix.png'))
+# Visualizations for security enhancements
+plot_confusion_matrix(y_test, y_pred_enhanced, os.path.join(plot_dir, 'confusion_matrix_enhanced.png'), title='Confusion Matrix after Security Enhancements')
+plot_normalized_confusion_matrix(y_test, y_pred_enhanced, os.path.join(plot_dir, 'normalized_confusion_matrix_enhanced.png'), title='Normalized Confusion Matrix after Security Enhancements')
 
 # Plot feature distribution for each feature
 feature_names = [f'Feature {i+1}' for i in range(X_train.shape[1])]
@@ -150,8 +170,8 @@ plot_anomaly_detection(X_train, anomalies, os.path.join(plot_dir, 'anomaly_detec
 # New visualizations for client data and performance
 feature_indices = [0, 1]  # Indices of features to visualize (adjust as needed)
 for i, (X_train, X_test, y_train, y_test) in enumerate(client_partitions):
-    plot_client_data_distribution(X_train, y_train, feature_indices, os.path.join(plot_dir, f'client_{i+1}_data_distribution.png'))
-    plot_client_model_performance(histories[i], os.path.join(plot_dir, f'client_{i+1}_model_performance.png'))
+    plot_client_data_distribution(X_train, y_train, feature_indices, os.path.join(plot_dir, f'client_{i+1}_data_distribution.png'), title=f'Client {i+1} Data Distribution')
+    plot_client_model_performance(histories[i], os.path.join(plot_dir, f'client_{i+1}_model_performance.png'), title=f'Client {i+1} Model Performance')
 
 # Function to retrieve and print block details
 def retrieve_and_print_block_details(blockchain, block_hash, block_index):

@@ -1,10 +1,10 @@
-# federated_learning/aggregator.py
 import numpy as np
-from tensorflow.keras.models import clone_model
+import tensorflow as tf
+from tensorflow.keras.models import Sequential
 
 class CentralAggregator:
-    def __init__(self, model):
-        self.global_model = model
+    def __init__(self, global_model: Sequential):
+        self.global_model = global_model
 
     def aggregate_models(self, client_models, method='fedavg'):
         if method == 'fedavg':
@@ -15,32 +15,35 @@ class CentralAggregator:
             raise ValueError(f"Unknown aggregation method: {method}")
 
     def fedavg(self, client_models):
-        global_weights = self.global_model.get_weights()
-        num_clients = len(client_models)
-        
-        # Initialize the global weights to zeros
+        global_weights = client_models[0]['model'].get_weights()
         new_global_weights = [np.zeros_like(weight) for weight in global_weights]
-        
-        # Sum all the client model weights
-        for model in client_models:
-            client_weights = model.get_weights()
+
+        for client_model in client_models:
+            client_weights = client_model['model'].get_weights()
             for i, weight in enumerate(client_weights):
-                new_global_weights[i] += weight / num_clients
-        
-        # Set the global model weights to the averaged weights
+                new_global_weights[i] += weight / len(client_models)
+
         self.global_model.set_weights(new_global_weights)
         return self.global_model
 
     def fedsgd(self, client_models):
-        # Assuming equal data size for each client for simplicity
-        total_gradient = [np.zeros_like(weight) for weight in self.global_model.get_weights()]
+        total_gradient = [np.zeros_like(weight) for weight in self.global_model.trainable_weights]
 
-        for model in client_models:
-            gradients = model.optimizer.get_gradients(model.total_loss, model.trainable_weights)
-            for i, grad in enumerate(gradients):
-                total_gradient[i] += grad
+        # Assuming all client models are compiled with the same input shape and loss
+        for client_model in client_models:
+            model = client_model['model']
+            train_data = client_model['train_data']
+            for X_batch, y_batch in train_data:
+                with tf.GradientTape() as tape:
+                    predictions = model(X_batch, training=True)
+                    loss = model.compute_loss(X_batch, y_batch, predictions)
+                gradients = tape.gradient(loss, self.global_model.trainable_weights)
+                gradients = [grad.numpy() if grad is not None else np.zeros_like(weight) for grad, weight in zip(gradients, self.global_model.trainable_weights)]  # Convert to numpy arrays
+                for i, grad in enumerate(gradients):
+                    total_gradient[i] += grad
 
         avg_gradient = [grad / len(client_models) for grad in total_gradient]
-        
-        self.global_model.optimizer.apply_gradients(zip(avg_gradient, self.global_model.trainable_weights))
+
+        optimizer = self.global_model.optimizer
+        optimizer.apply_gradients(zip(avg_gradient, self.global_model.trainable_weights))
         return self.global_model

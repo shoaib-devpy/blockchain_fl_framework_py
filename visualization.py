@@ -5,45 +5,45 @@ import numpy as np
 from sklearn.metrics import confusion_matrix
 from sklearn.preprocessing import StandardScaler
 
-def plot_training_history(histories, save_path):
+def plot_training_history(histories, save_path, title='Training History for Clients'):
     plt.figure()
     for i, history in enumerate(histories):
         plt.plot(history.history['accuracy'], label=f'Client {i+1} Training Accuracy')
         plt.plot(history.history['val_accuracy'], label=f'Client {i+1} Validation Accuracy')
-    plt.title('Model Accuracy')
+    plt.title(title)
     plt.ylabel('Accuracy')
     plt.xlabel('Epoch')
     plt.legend(loc='upper left')
     plt.savefig(save_path)
     plt.close()
 
-def plot_global_model_performance(global_accuracy, client_accuracies, save_path):
+def plot_global_model_performance(global_accuracy, client_accuracies, save_path, title='Global Model vs Client Models Performance'):
     plt.figure()
     client_ids = range(1, len(client_accuracies) + 1)
     plt.bar(client_ids, client_accuracies, label='Client Model Accuracies')
     plt.axhline(y=global_accuracy, color='r', linestyle='--', label='Global Model Accuracy')
     plt.xlabel('Client ID')
     plt.ylabel('Accuracy')
-    plt.title('Global Model vs Client Models Performance')
+    plt.title(title)
     plt.legend()
     plt.savefig(save_path)
     plt.close()
 
-def plot_confusion_matrix(y_true, y_pred, save_path):
+def plot_confusion_matrix(y_true, y_pred, save_path, title='Confusion Matrix (Non-Normalized)'):
     cm = confusion_matrix(y_true, y_pred)
     plt.figure(figsize=(10, 7))
     sns.heatmap(cm, annot=True, fmt='d', cmap='Blues')
-    plt.title('Confusion Matrix (Non-Normalized)')
+    plt.title(title)
     plt.ylabel('Actual Label')
     plt.xlabel('Predicted Label')
     plt.savefig(save_path)
     plt.close()
 
-def plot_normalized_confusion_matrix(y_true, y_pred, save_path):
+def plot_normalized_confusion_matrix(y_true, y_pred, save_path, title='Confusion Matrix (Normalized)'):
     cm = confusion_matrix(y_true, y_pred, normalize='true')
     plt.figure(figsize=(10, 7))
     sns.heatmap(cm, annot=True, fmt='.2f', cmap='Blues')
-    plt.title('Confusion Matrix (Normalized)')
+    plt.title(title)
     plt.ylabel('Actual Label')
     plt.xlabel('Predicted Label')
     plt.savefig(save_path)
@@ -71,22 +71,22 @@ def plot_anomaly_detection(data, anomalies, save_path):
     plt.savefig(save_path)
     plt.close()
 
-def plot_client_data_distribution(X_train, y_train, feature_indices, save_path):
+def plot_client_data_distribution(X_train, y_train, feature_indices, save_path, title='Client Data Distribution'):
     plt.figure(figsize=(10, 7))
     plt.scatter(X_train[y_train == 0, feature_indices[0]], X_train[y_train == 0, feature_indices[1]], label='Class 0')
     plt.scatter(X_train[y_train == 1, feature_indices[0]], X_train[y_train == 1, feature_indices[1]], label='Class 1', color='r')
-    plt.title('Client Data Distribution')
+    plt.title(title)
     plt.xlabel(f'Feature {feature_indices[0] + 1}')
     plt.ylabel(f'Feature {feature_indices[1] + 1}')
     plt.legend()
     plt.savefig(save_path)
     plt.close()
 
-def plot_client_model_performance(history, save_path):
+def plot_client_model_performance(history, save_path, title='Client Model Performance'):
     plt.figure()
     plt.plot(history.history['accuracy'], label='Training Accuracy')
     plt.plot(history.history['val_accuracy'], label='Validation Accuracy')
-    plt.title('Model Accuracy')
+    plt.title(title)
     plt.ylabel('Accuracy')
     plt.xlabel('Epoch')
     plt.legend(loc='upper left')
