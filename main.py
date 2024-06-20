@@ -78,11 +78,57 @@ logger.info("Starting model aggregation using FedAvg.")
 global_model_fedavg = aggregator_fedavg.aggregate_models(client_models_data, method='fedavg')
 logger.info("Model aggregation using FedAvg completed.")
 
-# Aggregation and evaluation for FedSGD
-aggregator_fedsgd = CentralAggregator(create_model(X_train.shape[1]))
-logger.info("Starting model aggregation using FedSGD.")
-global_model_fedsgd = aggregator_fedsgd.aggregate_models(client_models_data, method='fedsgd')
-logger.info("Model aggregation using FedSGD completed.")
+# FedAdam Aggregator
+class FederatedAdamAggregator(CentralAggregator):
+    def aggregate_models(self, client_models_data, method='fedadam', beta_1=0.9, beta_2=0.999, epsilon=1e-8):
+        if method == 'fedadam':
+            num_clients = len(client_models_data)
+            client_weights = [client['model'].get_weights() for client in client_models_data]
+
+            aggregated_weights = []
+            m = [0] * len(client_weights[0])
+            v = [0] * len(client_weights[0])
+
+            for weights in zip(*client_weights):
+                weight_sum = np.sum(weights, axis=0)
+                aggregated_weights.append(weight_sum / num_clients)
+
+            for i, weight in enumerate(aggregated_weights):
+                m[i] = beta_1 * m[i] + (1 - beta_1) * weight
+                v[i] = beta_2 * v[i] + (1 - beta_2) * (weight ** 2)
+                m_hat = m[i] / (1 - beta_1)
+                v_hat = v[i] / (1 - beta_2)
+                aggregated_weights[i] = m_hat / (np.sqrt(v_hat) + epsilon)
+
+            self.global_model.set_weights(aggregated_weights)
+        return self.global_model
+
+# Use FederatedAdamAggregator for aggregation
+aggregator_fedadam = FederatedAdamAggregator(create_model(X_train.shape[1]))
+logger.info("Starting model aggregation using FedAdam.")
+global_model_fedadam = aggregator_fedadam.aggregate_models(client_models_data, method='fedadam')
+logger.info("Model aggregation using FedAdam completed.")
+
+# Hybrid Model Aggregation
+def hybrid_aggregate(client_models_data, initial_model, iterations=3):
+    # Perform initial FedAvg aggregation
+    aggregator_fedavg = CentralAggregator(initial_model)
+    global_model = aggregator_fedavg.aggregate_models(client_models_data, method='fedavg')
+    
+    # Perform alternating FedAdam and FedAvg
+    for _ in range(iterations):
+        aggregator_fedadam = FederatedAdamAggregator(global_model)
+        global_model = aggregator_fedadam.aggregate_models(client_models_data, method='fedadam')
+        aggregator_fedavg = CentralAggregator(global_model)
+        global_model = aggregator_fedavg.aggregate_models(client_models_data, method='fedavg')
+    
+    return global_model
+
+# Perform hybrid aggregation
+initial_model = create_model(X_train.shape[1])
+logger.info("Starting hybrid model aggregation.")
+global_model_hybrid = hybrid_aggregate(client_models_data, initial_model)
+logger.info("Hybrid model aggregation completed.")
 
 # Function to calculate evaluation metrics
 def calculate_metrics(y_true, y_pred):
@@ -106,27 +152,37 @@ y_pred_fedavg = (global_model_fedavg.predict(X_test) > 0.5).astype("int32")
 tp, fp, fn, tn, recall, precision, f1 = calculate_metrics(y_test, y_pred_fedavg)
 logger.info(f'FedAvg Validation Metrics: TP={tp}, FP={fp}, FN={fn}, TN={tn}, Recall={recall:.2f}, Precision={precision:.2f}, F1-Score={f1:.2f}')
 
-# Evaluate FedSGD model
-y_pred_fedsgd = (global_model_fedsgd.predict(X_test) > 0.5).astype("int32")
-tp, fp, fn, tn, recall, precision, f1 = calculate_metrics(y_test, y_pred_fedsgd)
-logger.info(f'FedSGD Validation Metrics: TP={tp}, FP={fp}, FN={fn}, TN={tn}, Recall={recall:.2f}, Precision={precision:.2f}, F1-Score={f1:.2f}')
+# Evaluate FedAdam model
+y_pred_fedadam = (global_model_fedadam.predict(X_test) > 0.5).astype("int32")
+tp, fp, fn, tn, recall, precision, f1 = calculate_metrics(y_test, y_pred_fedadam)
+logger.info(f'FedAdam Validation Metrics: TP={tp}, FP={fp}, FN={fn}, TN={tn}, Recall={recall:.2f}, Precision={precision:.2f}, F1-Score={f1:.2f}')
+
+# Evaluate Hybrid model
+y_pred_hybrid = (global_model_hybrid.predict(X_test) > 0.5).astype("int32")
+tp, fp, fn, tn, recall, precision, f1 = calculate_metrics(y_test, y_pred_hybrid)
+logger.info(f'Hybrid Validation Metrics: TP={tp}, FP={fp}, FN={fn}, TN={tn}, Recall={recall:.2f}, Precision={precision:.2f}, F1-Score={f1:.2f}')
 
 # Plot training histories
 plot_dir = 'plots'
 os.makedirs(plot_dir, exist_ok=True)
-plot_training_history(histories, os.path.join(plot_dir, 'training_history.png'), title='Training History for Clients')
+plot_training_history(histories, os.path.join(plot_dir, 'training_history.png'))
 
-# Plot FedAvg vs FedSGD performance
+# Plot FedAvg vs FedAdam vs Hybrid performance
 client_accuracies_fedavg = [client.model.evaluate(client_partitions[i][1], client_partitions[i][3])[1] for i, client in enumerate(clients)]
-client_accuracies_fedsgd = [client.model.evaluate(client_partitions[i][1], client_partitions[i][3])[1] for i, client in enumerate(clients)]
-plot_global_model_performance(global_model_fedavg.evaluate(X_test, y_test)[1], client_accuracies_fedavg, os.path.join(plot_dir, 'global_model_performance_fedavg.png'), title='Global Model vs Client Models Performance (FedAvg)')
-plot_global_model_performance(global_model_fedsgd.evaluate(X_test, y_test)[1], client_accuracies_fedsgd, os.path.join(plot_dir, 'global_model_performance_fedsgd.png'), title='Global Model vs Client Models Performance (FedSGD)')
+client_accuracies_fedadam = [client.model.evaluate(client_partitions[i][1], client_partitions[i][3])[1] for i, client in enumerate(clients)]
+client_accuracies_hybrid = [client.model.evaluate(client_partitions[i][1], client_partitions[i][3])[1] for i, client in enumerate(clients)]
+
+plot_global_model_performance(global_model_fedavg.evaluate(X_test, y_test)[1], client_accuracies_fedavg, os.path.join(plot_dir, 'global_model_performance_fedavg.png'))
+plot_global_model_performance(global_model_fedadam.evaluate(X_test, y_test)[1], client_accuracies_fedadam, os.path.join(plot_dir, 'global_model_performance_fedadam.png'))
+plot_global_model_performance(global_model_hybrid.evaluate(X_test, y_test)[1], client_accuracies_hybrid, os.path.join(plot_dir, 'global_model_performance_hybrid.png'))
 
 # Plot confusion matrices
-plot_confusion_matrix(y_test, y_pred_fedavg, os.path.join(plot_dir, 'confusion_matrix_fedavg.png'), title='Confusion Matrix (FedAvg)')
-plot_confusion_matrix(y_test, y_pred_fedsgd, os.path.join(plot_dir, 'confusion_matrix_fedsgd.png'), title='Confusion Matrix (FedSGD)')
-plot_normalized_confusion_matrix(y_test, y_pred_fedavg, os.path.join(plot_dir, 'normalized_confusion_matrix_fedavg.png'), title='Normalized Confusion Matrix (FedAvg)')
-plot_normalized_confusion_matrix(y_test, y_pred_fedsgd, os.path.join(plot_dir, 'normalized_confusion_matrix_fedsgd.png'), title='Normalized Confusion Matrix (FedSGD)')
+plot_confusion_matrix(y_test, y_pred_fedavg, os.path.join(plot_dir, 'confusion_matrix_fedavg.png'))
+plot_confusion_matrix(y_test, y_pred_fedadam, os.path.join(plot_dir, 'confusion_matrix_fedadam.png'))
+plot_confusion_matrix(y_test, y_pred_hybrid, os.path.join(plot_dir, 'confusion_matrix_hybrid.png'))
+plot_normalized_confusion_matrix(y_test, y_pred_fedavg, os.path.join(plot_dir, 'normalized_confusion_matrix_fedavg.png'))
+plot_normalized_confusion_matrix(y_test, y_pred_fedadam, os.path.join(plot_dir, 'normalized_confusion_matrix_fedadam.png'))
+plot_normalized_confusion_matrix(y_test, y_pred_hybrid, os.path.join(plot_dir, 'normalized_confusion_matrix_hybrid.png'))
 
 # Blockchain and security steps remain the same
 # Initialize blockchain
@@ -156,8 +212,8 @@ tp, fp, fn, tn, recall, precision, f1 = calculate_metrics(y_test, y_pred_enhance
 logger.info(f'Test Metrics after security enhancements: TP={tp}, FP={fp}, FN={fn}, TN={tn}, Recall={recall:.2f}, Precision={precision:.2f}, F1-Score={f1:.2f}')
 
 # Visualizations for security enhancements
-plot_confusion_matrix(y_test, y_pred_enhanced, os.path.join(plot_dir, 'confusion_matrix_enhanced.png'), title='Confusion Matrix after Security Enhancements')
-plot_normalized_confusion_matrix(y_test, y_pred_enhanced, os.path.join(plot_dir, 'normalized_confusion_matrix_enhanced.png'), title='Normalized Confusion Matrix after Security Enhancements')
+plot_confusion_matrix(y_test, y_pred_enhanced, os.path.join(plot_dir, 'confusion_matrix_enhanced.png'))
+plot_normalized_confusion_matrix(y_test, y_pred_enhanced, os.path.join(plot_dir, 'normalized_confusion_matrix_enhanced.png'))
 
 # Plot feature distribution for each feature
 feature_names = [f'Feature {i+1}' for i in range(X_train.shape[1])]
@@ -170,8 +226,8 @@ plot_anomaly_detection(X_train, anomalies, os.path.join(plot_dir, 'anomaly_detec
 # New visualizations for client data and performance
 feature_indices = [0, 1]  # Indices of features to visualize (adjust as needed)
 for i, (X_train, X_test, y_train, y_test) in enumerate(client_partitions):
-    plot_client_data_distribution(X_train, y_train, feature_indices, os.path.join(plot_dir, f'client_{i+1}_data_distribution.png'), title=f'Client {i+1} Data Distribution')
-    plot_client_model_performance(histories[i], os.path.join(plot_dir, f'client_{i+1}_model_performance.png'), title=f'Client {i+1} Model Performance')
+    plot_client_data_distribution(X_train, y_train, feature_indices, os.path.join(plot_dir, f'client_{i+1}_data_distribution.png'))
+    plot_client_model_performance(histories[i], os.path.join(plot_dir, f'client_{i+1}_model_performance.png'))
 
 # Function to retrieve and print block details
 def retrieve_and_print_block_details(blockchain, block_hash, block_index):
