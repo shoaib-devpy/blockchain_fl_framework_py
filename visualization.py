@@ -33,7 +33,17 @@ def plot_confusion_matrix(y_true, y_pred, save_path):
     cm = confusion_matrix(y_true, y_pred)
     plt.figure(figsize=(10, 7))
     sns.heatmap(cm, annot=True, fmt='d', cmap='Blues')
-    plt.title('Confusion Matrix')
+    plt.title('Confusion Matrix (Non-Normalized)')
+    plt.ylabel('Actual Label')
+    plt.xlabel('Predicted Label')
+    plt.savefig(save_path)
+    plt.close()
+
+def plot_normalized_confusion_matrix(y_true, y_pred, save_path):
+    cm = confusion_matrix(y_true, y_pred, normalize='true')
+    plt.figure(figsize=(10, 7))
+    sns.heatmap(cm, annot=True, fmt='.2f', cmap='Blues')
+    plt.title('Confusion Matrix (Normalized)')
     plt.ylabel('Actual Label')
     plt.xlabel('Predicted Label')
     plt.savefig(save_path)

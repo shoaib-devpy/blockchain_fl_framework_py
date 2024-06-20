@@ -91,6 +91,7 @@ with Diagram("Federated Learning and Blockchain Process", show=False):
         plot_training_history = Custom("Plot Training History", "./icons/plot_training_history.png")
         plot_global_model_performance = Custom("Plot Global Model Performance", "./icons/plot_global_model_performance.png")
         plot_confusion_matrix = Custom("Plot Confusion Matrix", "./icons/plot_confusion_matrix.png")
+        plot_normalized_confusion_matrix = Custom("Plot Normalized Confusion Matrix", "./icons/plot_normalized_confusion_matrix.png")
         plot_feature_distribution = Custom("Plot Feature Distribution", "./icons/plot_feature_distribution.png")
         plot_anomaly_detection = Custom("Plot Anomaly Detection", "./icons/plot_anomaly_detection.png")
         plot_client_data_distribution = Custom("Plot Client Data Distribution", "./icons/plot_client_data_distribution.png")
@@ -99,6 +100,7 @@ with Diagram("Federated Learning and Blockchain Process", show=False):
         visualize_results >> plot_training_history
         visualize_results >> plot_global_model_performance
         visualize_results >> plot_confusion_matrix
+        visualize_results >> plot_normalized_confusion_matrix
         visualize_results >> plot_feature_distribution
         visualize_results >> plot_anomaly_detection
         visualize_results >> plot_client_data_distribution

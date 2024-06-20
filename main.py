@@ -12,9 +12,9 @@ from blockchain.smart_contract import SmartContract
 from security.anomaly_detection import AnomalyDetection
 from security.adversarial_training import AdversarialTraining
 from visualization import (plot_training_history, plot_global_model_performance, 
-                           plot_confusion_matrix, plot_feature_distribution, 
-                           plot_anomaly_detection, plot_client_data_distribution,
-                           plot_client_model_performance)
+                           plot_confusion_matrix, plot_normalized_confusion_matrix, 
+                           plot_feature_distribution, plot_anomaly_detection, 
+                           plot_client_data_distribution, plot_client_model_performance)
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense, Input, Dropout
 from tensorflow.keras.callbacks import EarlyStopping
@@ -137,6 +137,7 @@ client_accuracies = [client.model.evaluate(client_partitions[i][1], client_parti
 plot_training_history(histories, os.path.join(plot_dir, 'training_history.png'))
 plot_global_model_performance(global_accuracy, client_accuracies, os.path.join(plot_dir, 'global_model_performance.png'))
 plot_confusion_matrix(y_test, (global_model.predict(X_test) > 0.5).astype("int32"), os.path.join(plot_dir, 'confusion_matrix.png'))
+plot_normalized_confusion_matrix(y_test, (global_model.predict(X_test) > 0.5).astype("int32"), os.path.join(plot_dir, 'normalized_confusion_matrix.png'))
 
 # Plot feature distribution for each feature
 feature_names = [f'Feature {i+1}' for i in range(X_train.shape[1])]
