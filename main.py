@@ -3,6 +3,7 @@ matplotlib.use('Agg')  # Use a non-interactive backend
 
 import logging
 import os
+import pickle
 from utils.data_preprocessing import load_and_preprocess_data, partition_data_for_clients, prepare_client_data
 from federated_learning.client import FederatedClient
 from federated_learning.aggregator import CentralAggregator
@@ -68,6 +69,15 @@ for client_id, client in enumerate(clients):
     history = client.train_local_model(epochs=5, callbacks=[early_stopping], validation_data=(X_test, y_test))
     histories.append(history)
     logger.info(f"Client {client_id + 1} training completed.")
+
+# Apply anomaly detection and adversarial training
+anomaly_detection = AnomalyDetection()
+anomaly_detection.train(X_train)
+# Initializing model before adversarial training to avoid undefined variable issue
+global_model_fedavg = create_model(X_train.shape[1])
+adversarial_training = AdversarialTraining(global_model_fedavg)  # Assuming using the FedAvg model for adversarial training
+adversarial_training.apply_adversarial_training(X_train, y_train)
+logger.info("Security enhancements applied.")
 
 # Prepare models and training data for aggregation
 client_models_data = [{'model': client.model, 'train_data': client.train_data} for client in clients]
@@ -165,9 +175,10 @@ logger.info(f'Hybrid Validation Metrics: TP={tp}, FP={fp}, FN={fn}, TN={tn}, Rec
 # Plot training histories
 plot_dir = 'plots'
 os.makedirs(plot_dir, exist_ok=True)
-plot_training_history(histories, os.path.join(plot_dir, 'training_history.png'))
+for i, history in enumerate(histories):
+    plot_training_history([history], os.path.join(plot_dir, f'client_{i+1}_training_history.png'))
 
-# Plot FedAvg vs FedAdam vs Hybrid performance
+# Plot global model performance
 client_accuracies_fedavg = [client.model.evaluate(client_partitions[i][1], client_partitions[i][3])[1] for i, client in enumerate(clients)]
 client_accuracies_fedadam = [client.model.evaluate(client_partitions[i][1], client_partitions[i][3])[1] for i, client in enumerate(clients)]
 client_accuracies_hybrid = [client.model.evaluate(client_partitions[i][1], client_partitions[i][3])[1] for i, client in enumerate(clients)]
@@ -184,10 +195,30 @@ plot_normalized_confusion_matrix(y_test, y_pred_fedavg, os.path.join(plot_dir, '
 plot_normalized_confusion_matrix(y_test, y_pred_fedadam, os.path.join(plot_dir, 'normalized_confusion_matrix_fedadam.png'))
 plot_normalized_confusion_matrix(y_test, y_pred_hybrid, os.path.join(plot_dir, 'normalized_confusion_matrix_hybrid.png'))
 
+# Define load_blockchain and save_blockchain functions
+def load_blockchain():
+    if os.path.exists('blockchain.pkl'):
+        with open('blockchain.pkl', 'rb') as f:
+            blockchain = pickle.load(f)
+    else:
+        blockchain = Blockchain()
+        blockchain.create_genesis_block()
+        save_blockchain(blockchain)
+    return blockchain
+
+def save_blockchain(blockchain):
+    with open('blockchain.pkl', 'wb') as f:
+        pickle.dump(blockchain, f)
+
 # Blockchain and security steps remain the same
 # Initialize blockchain
-blockchain = Blockchain()
+blockchain = load_blockchain()
 logger.info("Blockchain initialized.")
+
+# Add a new block to the blockchain to ensure there is more than one block
+blockchain.add_block("New Block Data")
+save_blockchain(blockchain)
+logger.info("New block added to blockchain.")
 
 # Initialize smart contract and record model updates
 smart_contract = SmartContract()
@@ -198,36 +229,6 @@ logger.info("Model updates recorded on blockchain.")
 # Print blockchain and smart contract ledger for verification
 blockchain.print_chain()
 smart_contract.print_ledger()
-
-# Initialize security modules
-anomaly_detection = AnomalyDetection()
-anomaly_detection.train(X_train)
-adversarial_training = AdversarialTraining(global_model_fedavg)  # Assuming using the FedAvg model for adversarial training
-adversarial_training.apply_adversarial_training(X_train, y_train)
-logger.info("Security enhancements applied.")
-
-# Evaluate the global model again after security enhancements
-y_pred_enhanced = (global_model_fedavg.predict(X_test) > 0.5).astype("int32")
-tp, fp, fn, tn, recall, precision, f1 = calculate_metrics(y_test, y_pred_enhanced)
-logger.info(f'Test Metrics after security enhancements: TP={tp}, FP={fp}, FN={fn}, TN={tn}, Recall={recall:.2f}, Precision={precision:.2f}, F1-Score={f1:.2f}')
-
-# Visualizations for security enhancements
-plot_confusion_matrix(y_test, y_pred_enhanced, os.path.join(plot_dir, 'confusion_matrix_enhanced.png'))
-plot_normalized_confusion_matrix(y_test, y_pred_enhanced, os.path.join(plot_dir, 'normalized_confusion_matrix_enhanced.png'))
-
-# Plot feature distribution for each feature
-feature_names = [f'Feature {i+1}' for i in range(X_train.shape[1])]
-for i, feature_name in enumerate(feature_names):
-    plot_feature_distribution(X_train[:, i], feature_name, os.path.join(plot_dir, f'feature_distribution_{i+1}.png'))
-
-anomalies = X_train[anomaly_detection.detect(X_train) == -1]
-plot_anomaly_detection(X_train, anomalies, os.path.join(plot_dir, 'anomaly_detection.png'))
-
-# New visualizations for client data and performance
-feature_indices = [0, 1]  # Indices of features to visualize (adjust as needed)
-for i, (X_train, X_test, y_train, y_test) in enumerate(client_partitions):
-    plot_client_data_distribution(X_train, y_train, feature_indices, os.path.join(plot_dir, f'client_{i+1}_data_distribution.png'))
-    plot_client_model_performance(histories[i], os.path.join(plot_dir, f'client_{i+1}_model_performance.png'))
 
 # Function to retrieve and print block details
 def retrieve_and_print_block_details(blockchain, block_hash, block_index):
@@ -245,6 +246,29 @@ def retrieve_and_print_block_details(blockchain, block_hash, block_index):
         logger.info(f"No block found with index: {block_index}")
 
 # Retrieve and print block details for verification
-block_hash = blockchain.chain[-1].hash  # Replace with the hash of the block you want to retrieve
-block_index = blockchain.chain[-1].index  # Replace with the index of the block you want to retrieve
-retrieve_and_print_block_details(blockchain, block_hash, block_index)
+latest_block_hash = blockchain.get_latest_block().hash  # Retrieve the latest block's hash
+genesis_block_index = 0  # Retrieve the genesis block by index
+retrieve_and_print_block_details(blockchain, latest_block_hash, genesis_block_index)
+
+# Evaluate the global model again after security enhancements
+y_pred_enhanced = (global_model_fedavg.predict(X_test) > 0.5).astype("int32")
+tp, fp, fn, tn, recall, precision, f1 = calculate_metrics(y_test, y_pred_enhanced)
+logger.info(f'Test Metrics after security enhancements: TP={tp}, FP={fp}, FN={fn}, TN={tn}, Recall={recall:.2f}, Precision={precision:.2f}, F1-Score={f1:.2f}')
+
+# Visualizations for security enhancements
+plot_confusion_matrix(y_test, y_pred_enhanced, os.path.join(plot_dir, 'confusion_matrix_enhanced.png'))
+plot_normalized_confusion_matrix(y_test, y_pred_enhanced, os.path.join(plot_dir, 'normalized_confusion_matrix_enhanced.png'))
+
+# Plot feature distribution for each feature
+feature_names = [f'Feature {i+1}' for i in range(X_train.shape[1])]
+for i, feature_name in enumerate(feature_names):
+    plot_feature_distribution(X_train[:, i], feature_name, os.path.join(plot_dir, f'feature_distribution_{i+1}.png'))
+
+anomalies = X_train[anomaly_detection.detect_anomalies(X_train) == -1]
+plot_anomaly_detection(X_train, anomalies, os.path.join(plot_dir, 'anomaly_detection.png'))
+
+# New visualizations for client data and performance
+feature_indices = [0, 1]  # Indices of features to visualize (adjust as needed)
+for i, (X_train, X_test, y_train, y_test) in enumerate(client_partitions):
+    plot_client_data_distribution(X_train, y_train, feature_indices, os.path.join(plot_dir, f'client_{i+1}_data_distribution.png'))
+    plot_client_model_performance(histories[i], os.path.join(plot_dir, f'client_{i+1}_model_performance.png'))

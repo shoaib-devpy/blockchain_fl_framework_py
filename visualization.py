@@ -5,17 +5,28 @@ import numpy as np
 from sklearn.metrics import confusion_matrix
 from sklearn.preprocessing import StandardScaler
 
-def plot_training_history(histories, save_path, title='Training History for Clients'):
-    plt.figure()
+def plot_training_history(histories, filename):
     for i, history in enumerate(histories):
-        plt.plot(history.history['accuracy'], label=f'Client {i+1} Training Accuracy')
-        plt.plot(history.history['val_accuracy'], label=f'Client {i+1} Validation Accuracy')
-    plt.title(title)
-    plt.ylabel('Accuracy')
-    plt.xlabel('Epoch')
-    plt.legend(loc='upper left')
-    plt.savefig(save_path)
-    plt.close()
+        plt.figure()
+        plt.plot(history.history['accuracy'])
+        plt.plot(history.history['val_accuracy'])
+        plt.title(f'Client {i+1} Model Accuracy')
+        plt.ylabel('Accuracy')
+        plt.xlabel('Epoch')
+        plt.legend(['Train', 'Validation'], loc='upper left')
+        plt.savefig(filename.replace('.png', f'_accuracy.png'))
+        plt.close()
+
+        plt.figure()
+        plt.plot(history.history['loss'])
+        plt.plot(history.history['val_loss'])
+        plt.title(f'Client {i+1} Model Loss')
+        plt.ylabel('Loss')
+        plt.xlabel('Epoch')
+        plt.legend(['Train', 'Validation'], loc='upper left')
+        plt.savefig(filename.replace('.png', f'_loss.png'))
+        plt.close()
+
 
 def plot_global_model_performance(global_accuracy, client_accuracies, save_path, title='Global Model vs Client Models Performance'):
     plt.figure()
