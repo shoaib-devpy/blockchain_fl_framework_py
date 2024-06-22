@@ -60,13 +60,13 @@ def create_model(input_shape):
 clients = [FederatedClient((X_train, y_train), create_model(X_train.shape[1])) for (X_train, X_test, y_train, y_test) in client_partitions]
 
 # Train local models with early stopping
-early_stopping = EarlyStopping(monitor='val_loss', patience=3)
+early_stopping = EarlyStopping(monitor='val_loss', patience=10)
 logger.info("Starting training for federated clients.")
 histories = []
 for client_id, client in enumerate(clients):
     X_train, X_test, y_train, y_test = client_partitions[client_id]
     logger.info(f"Training client {client_id + 1}")
-    history = client.train_local_model(epochs=5, callbacks=[early_stopping], validation_data=(X_test, y_test))
+    history = client.train_local_model(epochs=10, callbacks=[early_stopping], validation_data=(X_test, y_test))
     histories.append(history)
     logger.info(f"Client {client_id + 1} training completed.")
 

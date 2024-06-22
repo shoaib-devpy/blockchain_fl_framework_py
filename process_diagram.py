@@ -51,6 +51,15 @@ with Diagram("Federated Learning and Blockchain Process", show=False):
         client4 >> aggregate_models
         client5 >> aggregate_models
 
+    with Cluster("Aggregation Methods"):
+        fedavg = Action("FedAvg Aggregation")
+        fedadam = Action("FedAdam Aggregation")
+        hybrid = Action("Hybrid Aggregation")
+        
+        aggregate_models >> fedavg
+        aggregate_models >> fedadam
+        aggregate_models >> hybrid
+
     with Cluster("Blockchain"):
         blockchain = Custom("Blockchain", "./icons/blockchain.png")
         smart_contract = Custom("Smart Contract", "./icons/smart_contract.png")
@@ -58,7 +67,7 @@ with Diagram("Federated Learning and Blockchain Process", show=False):
         aggregate_models >> blockchain
         blockchain >> smart_contract
 
-    with Cluster("Security"):
+    with Cluster("Security Enhancements"):
         anomaly_detection = Custom("Anomaly Detection", "./icons/anomaly_detection.png")
         adversarial_training = Custom("Adversarial Training", "./icons/adversarial_training.png")
         
