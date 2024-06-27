@@ -1,9 +1,13 @@
-import matplotlib
-matplotlib.use('Agg')  # Use a non-interactive backend
-
 import logging
 import os
 import pickle
+import numpy as np
+import tensorflow as tf
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense, Input, Dropout
+from tensorflow.keras.callbacks import EarlyStopping
+from sklearn.metrics import confusion_matrix, recall_score, precision_score, f1_score
+
 from utils.data_preprocessing import load_and_preprocess_data, partition_data_for_clients, prepare_client_data
 from federated_learning.client import FederatedClient
 from federated_learning.aggregator import CentralAggregator
@@ -15,12 +19,6 @@ from visualization import (plot_training_history, plot_global_model_performance,
                            plot_confusion_matrix, plot_normalized_confusion_matrix, 
                            plot_feature_distribution, plot_anomaly_detection, 
                            plot_client_data_distribution, plot_client_model_performance)
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Dense, Input, Dropout
-from tensorflow.keras.callbacks import EarlyStopping
-from sklearn.metrics import confusion_matrix, recall_score, precision_score, f1_score
-import numpy as np
-import tensorflow as tf
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -33,7 +31,7 @@ os.makedirs('data', exist_ok=True)
 df = load_and_preprocess_data('data/credit_card_2023.csv')
 
 # Partition data for clients
-n_clients = 5
+n_clients = 10
 client_data = partition_data_for_clients(df, n_clients)
 
 # Save client-specific datasets
@@ -60,7 +58,7 @@ def create_model(input_shape):
 clients = [FederatedClient((X_train, y_train), create_model(X_train.shape[1])) for (X_train, X_test, y_train, y_test) in client_partitions]
 
 # Train local models with early stopping
-early_stopping = EarlyStopping(monitor='val_loss', patience=10)
+early_stopping = EarlyStopping(monitor='val_loss', patience=3)
 logger.info("Starting training for federated clients.")
 histories = []
 for client_id, client in enumerate(clients):
@@ -176,24 +174,24 @@ logger.info(f'Hybrid Validation Metrics: TP={tp}, FP={fp}, FN={fn}, TN={tn}, Rec
 plot_dir = 'plots'
 os.makedirs(plot_dir, exist_ok=True)
 for i, history in enumerate(histories):
-    plot_training_history([history], os.path.join(plot_dir, f'client_{i+1}_training_history.png'))
+    plot_training_history([history], os.path.join(plot_dir, f'client_{i+1}_training_history.png'), title=f'Client {i+1} Training History')
 
 # Plot global model performance
 client_accuracies_fedavg = [client.model.evaluate(client_partitions[i][1], client_partitions[i][3])[1] for i, client in enumerate(clients)]
 client_accuracies_fedadam = [client.model.evaluate(client_partitions[i][1], client_partitions[i][3])[1] for i, client in enumerate(clients)]
 client_accuracies_hybrid = [client.model.evaluate(client_partitions[i][1], client_partitions[i][3])[1] for i, client in enumerate(clients)]
 
-plot_global_model_performance(global_model_fedavg.evaluate(X_test, y_test)[1], client_accuracies_fedavg, os.path.join(plot_dir, 'global_model_performance_fedavg.png'))
-plot_global_model_performance(global_model_fedadam.evaluate(X_test, y_test)[1], client_accuracies_fedadam, os.path.join(plot_dir, 'global_model_performance_fedadam.png'))
-plot_global_model_performance(global_model_hybrid.evaluate(X_test, y_test)[1], client_accuracies_hybrid, os.path.join(plot_dir, 'global_model_performance_hybrid.png'))
+plot_global_model_performance(global_model_fedavg.evaluate(X_test, y_test)[1], client_accuracies_fedavg, os.path.join(plot_dir, 'global_model_performance_fedavg.png'), title='Global Model vs Client Models Performance (FedAvg)')
+plot_global_model_performance(global_model_fedadam.evaluate(X_test, y_test)[1], client_accuracies_fedadam, os.path.join(plot_dir, 'global_model_performance_fedadam.png'), title='Global Model vs Client Models Performance (FedAdam)')
+plot_global_model_performance(global_model_hybrid.evaluate(X_test, y_test)[1], client_accuracies_hybrid, os.path.join(plot_dir, 'global_model_performance_hybrid.png'), title='Global Model vs Client Models Performance (Hybrid)')
 
 # Plot confusion matrices
-plot_confusion_matrix(y_test, y_pred_fedavg, os.path.join(plot_dir, 'confusion_matrix_fedavg.png'))
-plot_confusion_matrix(y_test, y_pred_fedadam, os.path.join(plot_dir, 'confusion_matrix_fedadam.png'))
-plot_confusion_matrix(y_test, y_pred_hybrid, os.path.join(plot_dir, 'confusion_matrix_hybrid.png'))
-plot_normalized_confusion_matrix(y_test, y_pred_fedavg, os.path.join(plot_dir, 'normalized_confusion_matrix_fedavg.png'))
-plot_normalized_confusion_matrix(y_test, y_pred_fedadam, os.path.join(plot_dir, 'normalized_confusion_matrix_fedadam.png'))
-plot_normalized_confusion_matrix(y_test, y_pred_hybrid, os.path.join(plot_dir, 'normalized_confusion_matrix_hybrid.png'))
+plot_confusion_matrix(y_test, y_pred_fedavg, os.path.join(plot_dir, 'confusion_matrix_fedavg.png'), title='Confusion Matrix (FedAvg)')
+plot_confusion_matrix(y_test, y_pred_fedadam, os.path.join(plot_dir, 'confusion_matrix_fedadam.png'), title='Confusion Matrix (FedAdam)')
+plot_confusion_matrix(y_test, y_pred_hybrid, os.path.join(plot_dir, 'confusion_matrix_hybrid.png'), title='Confusion Matrix (Hybrid)')
+plot_normalized_confusion_matrix(y_test, y_pred_fedavg, os.path.join(plot_dir, 'normalized_confusion_matrix_fedavg.png'), title='Normalized Confusion Matrix (FedAvg)')
+plot_normalized_confusion_matrix(y_test, y_pred_fedadam, os.path.join(plot_dir, 'normalized_confusion_matrix_fedadam.png'), title='Normalized Confusion Matrix (FedAdam)')
+plot_normalized_confusion_matrix(y_test, y_pred_hybrid, os.path.join(plot_dir, 'normalized_confusion_matrix_hybrid.png'), title='Normalized Confusion Matrix (Hybrid)')
 
 # Define load_blockchain and save_blockchain functions
 def load_blockchain():
@@ -256,19 +254,19 @@ tp, fp, fn, tn, recall, precision, f1 = calculate_metrics(y_test, y_pred_enhance
 logger.info(f'Test Metrics after security enhancements: TP={tp}, FP={fp}, FN={fn}, TN={tn}, Recall={recall:.2f}, Precision={precision:.2f}, F1-Score={f1:.2f}')
 
 # Visualizations for security enhancements
-plot_confusion_matrix(y_test, y_pred_enhanced, os.path.join(plot_dir, 'confusion_matrix_enhanced.png'))
-plot_normalized_confusion_matrix(y_test, y_pred_enhanced, os.path.join(plot_dir, 'normalized_confusion_matrix_enhanced.png'))
+plot_confusion_matrix(y_test, y_pred_enhanced, os.path.join(plot_dir, 'confusion_matrix_enhanced.png'), title='Confusion Matrix (Enhanced)')
+plot_normalized_confusion_matrix(y_test, y_pred_enhanced, os.path.join(plot_dir, 'normalized_confusion_matrix_enhanced.png'), title='Normalized Confusion Matrix (Enhanced)')
 
 # Plot feature distribution for each feature
 feature_names = [f'Feature {i+1}' for i in range(X_train.shape[1])]
 for i, feature_name in enumerate(feature_names):
-    plot_feature_distribution(X_train[:, i], feature_name, os.path.join(plot_dir, f'feature_distribution_{i+1}.png'))
+    plot_feature_distribution(X_train[:, i], feature_name, os.path.join(plot_dir, f'feature_distribution_{i+1}.png'), title=f'Feature Distribution {feature_name} (Enhanced)')
 
 anomalies = X_train[anomaly_detection.detect_anomalies(X_train) == -1]
-plot_anomaly_detection(X_train, anomalies, os.path.join(plot_dir, 'anomaly_detection.png'))
+plot_anomaly_detection(X_train, anomalies, os.path.join(plot_dir, 'anomaly_detection.png'), title='Anomaly Detection (Enhanced)')
 
 # New visualizations for client data and performance
 feature_indices = [0, 1]  # Indices of features to visualize (adjust as needed)
 for i, (X_train, X_test, y_train, y_test) in enumerate(client_partitions):
-    plot_client_data_distribution(X_train, y_train, feature_indices, os.path.join(plot_dir, f'client_{i+1}_data_distribution.png'))
-    plot_client_model_performance(histories[i], os.path.join(plot_dir, f'client_{i+1}_model_performance.png'))
+    plot_client_data_distribution(X_train, y_train, feature_indices, os.path.join(plot_dir, f'client_{i+1}_data_distribution.png'), client_id=i+1, title=f'Client {i+1} Data Distribution')
+    plot_client_model_performance(histories[i], os.path.join(plot_dir, f'client_{i+1}_model_performance.png'), client_id=i+1, title=f'Client {i+1} Model Performance')

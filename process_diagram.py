@@ -21,35 +21,18 @@ with Diagram("Federated Learning and Blockchain Process", show=False):
         load_data >> clean_data >> normalize_data >> feature_engineering >> preprocess_data >> partition_data
 
     with Cluster("Federated Learning"):
-        client1 = Server("Client 1")
-        client2 = Server("Client 2")
-        client3 = Server("Client 3")
-        client4 = Server("Client 4")
-        client5 = Server("Client 5")
-        train_local_model_client1 = Action("Train Local Model (Client 1)")
-        train_local_model_client2 = Action("Train Local Model (Client 2)")
-        train_local_model_client3 = Action("Train Local Model (Client 3)")
-        train_local_model_client4 = Action("Train Local Model (Client 4)")
-        train_local_model_client5 = Action("Train Local Model (Client 5)")
+        clients = []
+        train_local_models = []
+        for i in range(1, 11):
+            client = Server(f"Client {i}")
+            train_local_model = Action(f"Train Local Model (Client {i})")
+            clients.append(client)
+            train_local_models.append(train_local_model)
+            partition_data >> train_local_model >> client
+
         aggregate_models = Action("Aggregate Models")
-        
-        partition_data >> train_local_model_client1
-        partition_data >> train_local_model_client2
-        partition_data >> train_local_model_client3
-        partition_data >> train_local_model_client4
-        partition_data >> train_local_model_client5
-
-        train_local_model_client1 >> client1
-        train_local_model_client2 >> client2
-        train_local_model_client3 >> client3
-        train_local_model_client4 >> client4
-        train_local_model_client5 >> client5
-
-        client1 >> aggregate_models
-        client2 >> aggregate_models
-        client3 >> aggregate_models
-        client4 >> aggregate_models
-        client5 >> aggregate_models
+        for client in clients:
+            client >> aggregate_models
 
     with Cluster("Aggregation Methods"):
         fedavg = Action("FedAvg Aggregation")
