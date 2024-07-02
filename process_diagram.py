@@ -47,6 +47,13 @@ with Diagram("Federated Learning and Blockchain Process", show=False):
         aggregate_models >> blockchain
         blockchain >> smart_contract
 
+        with Cluster("PBFT"):
+            network = Custom("Network", "./icons/network.png")
+            pbft_nodes = [Server(f"PBFT Node {i}") for i in range(1, 11)]
+            blockchain >> network
+            for node in pbft_nodes:
+                network >> node
+
     with Cluster("Security Enhancements"):
         anomaly_detection = Custom("Anomaly Detection", "./icons/anomaly_detection.png")
         adversarial_training = Custom("Adversarial Training", "./icons/adversarial_training.png")
