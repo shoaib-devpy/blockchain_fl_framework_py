@@ -1,6 +1,8 @@
 # blockchain/blockchain.py
 import hashlib
 import time
+from pbft.pbft_node import PBFTNode
+from pbft.network import Network
 
 class Block:
     def __init__(self, index, previous_hash, timestamp, data, hash):
@@ -13,11 +15,20 @@ class Block:
 class Blockchain:
     def __init__(self):
         self.chain = []
+        self.network = Network()  # Initialize the network attribute
         self.create_genesis_block()
+        self.initialize_pbft_nodes()
 
     def create_genesis_block(self):
         genesis_block = Block(0, "0", time.time(), "Genesis Block", self.hash_block(0, "0", time.time(), "Genesis Block"))
         self.chain.append(genesis_block)
+
+    def initialize_pbft_nodes(self):
+        if not hasattr(self, 'network'):
+            self.network = Network()  # Initialize the network if it doesn't exist
+        self.nodes = [PBFTNode(i, self.network) for i in range(4)]
+        for node in self.nodes:
+            self.network.add_node(node)
 
     def get_latest_block(self):
         return self.chain[-1]
@@ -28,6 +39,11 @@ class Blockchain:
         new_timestamp = time.time()
         new_hash = self.hash_block(new_index, previous_block.hash, new_timestamp, data)
         new_block = Block(new_index, previous_block.hash, new_timestamp, data, new_hash)
+
+        primary_node = self.nodes[0]  # Assuming the first node is primary
+        primary_node.pre_prepare(new_block)
+        
+        # Assuming all nodes eventually reach consensus and add the block
         self.chain.append(new_block)
         return new_block
 

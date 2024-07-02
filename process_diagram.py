@@ -12,13 +12,10 @@ with Diagram("Federated Learning and Blockchain Process", show=False):
     
     with Cluster("Data Preprocessing"):
         load_data = Custom("Load Data", "./icons/load_data.png")
-        clean_data = Custom("Clean Data", "./icons/clean_data.png")
-        normalize_data = Custom("Normalize Data", "./icons/normalize_data.png")
-        feature_engineering = Custom("Feature Engineering", "./icons/feature_engineering.png")
         preprocess_data = Custom("Preprocess Data", "./icons/preprocess_data.png")
         partition_data = Custom("Partition Data", "./icons/partition_data.png")
         
-        load_data >> clean_data >> normalize_data >> feature_engineering >> preprocess_data >> partition_data
+        load_data >> preprocess_data >> partition_data
 
     with Cluster("Federated Learning"):
         clients = []

@@ -1,4 +1,4 @@
-#visualization.py
+# visualization.py
 import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
@@ -26,7 +26,6 @@ def plot_training_history(histories, filename, title):
         plt.legend(['Train', 'Validation'], loc='upper left')
         plt.savefig(filename.replace('.png', f'_client_{i+1}_loss.png'))
         plt.close()
-
 
 def plot_global_model_performance(global_accuracy, client_accuracies, save_path, title):
     plt.figure()
@@ -102,5 +101,36 @@ def plot_client_model_performance(history, save_path, client_id, title):
     plt.ylabel('Accuracy')
     plt.xlabel('Epoch')
     plt.legend(loc='upper left')
+    plt.savefig(save_path)
+    plt.close()
+
+# Example calls for generating plots with specific titles for algorithms, blockchain, and PBFT
+def plot_algorithm_performance(algorithm_name, global_accuracy, client_accuracies, save_path):
+    plt.figure()
+    client_ids = range(1, len(client_accuracies) + 1)
+    plt.bar(client_ids, client_accuracies, label='Client Model Accuracies')
+    plt.axhline(y=global_accuracy, color='r', linestyle='--', label='Global Model Accuracy')
+    plt.xlabel('Client ID')
+    plt.ylabel('Accuracy')
+    plt.title(f'Algorithm Performance - {algorithm_name}')
+    plt.legend()
+    plt.savefig(save_path)
+    plt.close()
+
+def plot_blockchain_visualization(blockchain_data, save_path, title):
+    plt.figure(figsize=(10, 7))
+    plt.plot(blockchain_data)
+    plt.title(f'Blockchain Visualization - {title}')
+    plt.xlabel('Block Index')
+    plt.ylabel('Block Data')
+    plt.savefig(save_path)
+    plt.close()
+
+def plot_pbft_visualization(pbft_data, save_path, title):
+    plt.figure(figsize=(10, 7))
+    plt.plot(pbft_data)
+    plt.title(f'PBFT Visualization - {title}')
+    plt.xlabel('Node')
+    plt.ylabel('State')
     plt.savefig(save_path)
     plt.close()
