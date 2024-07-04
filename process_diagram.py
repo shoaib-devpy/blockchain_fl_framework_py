@@ -4,20 +4,46 @@ from diagrams.custom import Custom
 from diagrams.onprem.client import Client
 from diagrams.onprem.compute import Server
 from diagrams.programming.flowchart import Action
+from diagrams.aws.storage import S3
+from diagrams.generic.network import Router
+from diagrams.generic.device import Mobile, Tablet
 
 # Add Graphviz bin directory to PATH
 os.environ["PATH"] += os.pathsep + r'C:\Program Files\Graphviz\bin'
 
-with Diagram("Federated Learning and Blockchain Process", show=False):
+graph_attr = {
+    "fontsize": "20",
+    "bgcolor": "white",
+    "penwidth": "2.5",
+    "splines": "true",
+    "nodesep": "1.5",
+    "ranksep": "1.5",
+}
+
+node_attr = {
+    "fontsize": "16",
+    "shape": "rectangle",
+    "style": "rounded,filled",
+    "penwidth": "2.5",
+    "color": "lightblue",
+}
+
+edge_attr = {
+    "color": "gray",
+    "penwidth": "2.5",
+    "arrowsize": "1.5",
+}
+
+with Diagram("Enhancing Security in Federated Learning for Financial Applications through Blockchain Integration and Advanced Machine Learning Techniques", show=False, direction="TB", graph_attr=graph_attr, node_attr=node_attr, edge_attr=edge_attr):
     
-    with Cluster("Data Preprocessing"):
+    with Cluster("Data Preprocessing", graph_attr={"color": "lightblue"}):
         load_data = Custom("Load Data", "./icons/load_data.png")
         preprocess_data = Custom("Preprocess Data", "./icons/preprocess_data.png")
         partition_data = Custom("Partition Data", "./icons/partition_data.png")
         
         load_data >> preprocess_data >> partition_data
 
-    with Cluster("Federated Learning"):
+    with Cluster("Federated Learning", graph_attr={"color": "lightgreen"}):
         clients = []
         train_local_models = []
         for i in range(1, 11):
@@ -31,7 +57,7 @@ with Diagram("Federated Learning and Blockchain Process", show=False):
         for client in clients:
             client >> aggregate_models
 
-    with Cluster("Aggregation Methods"):
+    with Cluster("Aggregation Methods", graph_attr={"color": "lightyellow"}):
         fedavg = Action("FedAvg Aggregation")
         fedadam = Action("FedAdam Aggregation")
         hybrid = Action("Hybrid Aggregation")
@@ -40,28 +66,28 @@ with Diagram("Federated Learning and Blockchain Process", show=False):
         aggregate_models >> fedadam
         aggregate_models >> hybrid
 
-    with Cluster("Blockchain"):
+    with Cluster("Blockchain", graph_attr={"color": "lightblue"}):
         blockchain = Custom("Blockchain", "./icons/blockchain.png")
         smart_contract = Custom("Smart Contract", "./icons/smart_contract.png")
         
         aggregate_models >> blockchain
         blockchain >> smart_contract
 
-        with Cluster("PBFT"):
-            network = Custom("Network", "./icons/network.png")
+        with Cluster("PBFT", graph_attr={"color": "pink"}):
+            network = Router("Network")
             pbft_nodes = [Server(f"PBFT Node {i}") for i in range(1, 11)]
             blockchain >> network
             for node in pbft_nodes:
                 network >> node
 
-    with Cluster("Security Enhancements"):
+    with Cluster("Security Enhancements", graph_attr={"color": "lightcoral"}):
         anomaly_detection = Custom("Anomaly Detection", "./icons/anomaly_detection.png")
         adversarial_training = Custom("Adversarial Training", "./icons/adversarial_training.png")
         
         aggregate_models >> anomaly_detection
         anomaly_detection >> adversarial_training
 
-    with Cluster("Evaluation"):
+    with Cluster("Evaluation", graph_attr={"color": "lightyellow"}):
         evaluate_model = Action("Evaluate Model")
         calculate_metrics = Action("Calculate Metrics")
         tp = Custom("True Positives (TP)", "./icons/tp.png")
@@ -83,7 +109,7 @@ with Diagram("Federated Learning and Blockchain Process", show=False):
         calculate_metrics >> f1_score
         f1_score >> visualize_results
 
-    with Cluster("Visualization"):
+    with Cluster("Visualization", graph_attr={"color": "lightpurple"}):
         plot_training_history = Custom("Plot Training History", "./icons/plot_training_history.png")
         plot_global_model_performance = Custom("Plot Global Model Performance", "./icons/plot_global_model_performance.png")
         plot_confusion_matrix = Custom("Plot Confusion Matrix", "./icons/plot_confusion_matrix.png")

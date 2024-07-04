@@ -1,4 +1,3 @@
-# visualization.py
 import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
@@ -8,22 +7,22 @@ from sklearn.preprocessing import StandardScaler
 def plot_training_history(histories, filename, title):
     for i, history in enumerate(histories):
         plt.figure()
-        plt.plot(history.history['accuracy'])
-        plt.plot(history.history['val_accuracy'])
+        plt.plot(history.history['accuracy'], label='Training Accuracy')
+        plt.plot(history.history['val_accuracy'], label='Validation Accuracy')
         plt.title(f'{title} - Client {i+1} Model Accuracy')
         plt.ylabel('Accuracy')
         plt.xlabel('Epoch')
-        plt.legend(['Train', 'Validation'], loc='upper left')
+        plt.legend(loc='upper left')
         plt.savefig(filename.replace('.png', f'_client_{i+1}_accuracy.png'))
         plt.close()
 
         plt.figure()
-        plt.plot(history.history['loss'])
-        plt.plot(history.history['val_loss'])
+        plt.plot(history.history['loss'], label='Training Loss')
+        plt.plot(history.history['val_loss'], label='Validation Loss')
         plt.title(f'{title} - Client {i+1} Model Loss')
         plt.ylabel('Loss')
         plt.xlabel('Epoch')
-        plt.legend(['Train', 'Validation'], loc='upper left')
+        plt.legend(loc='upper left')
         plt.savefig(filename.replace('.png', f'_client_{i+1}_loss.png'))
         plt.close()
 
@@ -104,7 +103,39 @@ def plot_client_model_performance(history, save_path, client_id, title):
     plt.savefig(save_path)
     plt.close()
 
-# Example calls for generating plots with specific titles for algorithms, blockchain, and PBFT
+def plot_blockchain_visualization(blockchain, save_path, title):
+    block_indices = [block.index for block in blockchain.chain]
+    block_hashes = [block.hash for block in blockchain.chain]
+    block_data = [block.data for block in blockchain.chain]
+
+    plt.figure(figsize=(15, 10))
+    plt.plot(block_indices, block_hashes, marker='o', linestyle='-', color='b')
+    plt.title(f'{title} - Block Hashes Over Time')
+    plt.xlabel('Block Index')
+    plt.ylabel('Block Hash')
+    plt.grid(True)
+    plt.savefig(save_path.replace('.png', '_hashes.png'))
+    plt.close()
+
+    plt.figure(figsize=(15, 10))
+    plt.plot(block_indices, block_data, marker='x', linestyle='--', color='r')
+    plt.title(f'{title} - Block Data Over Time')
+    plt.xlabel('Block Index')
+    plt.ylabel('Block Data')
+    plt.grid(True)
+    plt.savefig(save_path.replace('.png', '_data.png'))
+    plt.close()
+
+def plot_pbft_visualization(pbft_data, save_path, title):
+    plt.figure(figsize=(15, 10))
+    plt.plot(pbft_data)
+    plt.title(f'{title} - PBFT Node States')
+    plt.xlabel('Node')
+    plt.ylabel('State')
+    plt.grid(True)
+    plt.savefig(save_path)
+    plt.close()
+
 def plot_algorithm_performance(algorithm_name, global_accuracy, client_accuracies, save_path):
     plt.figure()
     client_ids = range(1, len(client_accuracies) + 1)
@@ -114,23 +145,5 @@ def plot_algorithm_performance(algorithm_name, global_accuracy, client_accuracie
     plt.ylabel('Accuracy')
     plt.title(f'Algorithm Performance - {algorithm_name}')
     plt.legend()
-    plt.savefig(save_path)
-    plt.close()
-
-def plot_blockchain_visualization(blockchain_data, save_path, title):
-    plt.figure(figsize=(10, 7))
-    plt.plot(blockchain_data)
-    plt.title(f'Blockchain Visualization - {title}')
-    plt.xlabel('Block Index')
-    plt.ylabel('Block Data')
-    plt.savefig(save_path)
-    plt.close()
-
-def plot_pbft_visualization(pbft_data, save_path, title):
-    plt.figure(figsize=(10, 7))
-    plt.plot(pbft_data)
-    plt.title(f'PBFT Visualization - {title}')
-    plt.xlabel('Node')
-    plt.ylabel('State')
     plt.savefig(save_path)
     plt.close()

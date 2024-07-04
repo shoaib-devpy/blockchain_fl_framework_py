@@ -1,4 +1,3 @@
-# blockchain/blockchain.py
 import hashlib
 import time
 from pbft.pbft_node import PBFTNode
@@ -11,6 +10,10 @@ class Block:
         self.timestamp = timestamp
         self.data = data
         self.hash = hash
+
+    def __repr__(self):
+        return (f"Block(index={self.index}, previous_hash={self.previous_hash}, "
+                f"timestamp={self.timestamp}, data={self.data}, hash={self.hash})")
 
 class Blockchain:
     def __init__(self):
@@ -53,7 +56,7 @@ class Blockchain:
 
     def print_chain(self):
         for block in self.chain:
-            print(f"Block(index={block.index}, previous_hash={block.previous_hash}, timestamp={block.timestamp}, data={block.data}, hash={block.hash})")
+            print(block)
 
     def get_block_by_hash(self, block_hash):
         for block in self.chain:
@@ -66,3 +69,9 @@ class Blockchain:
             if block.index == block_index:
                 return block
         return None
+
+    def print_block(self, block):
+        if block:
+            print(block)
+        else:
+            print("Block not found")

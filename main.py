@@ -27,6 +27,96 @@ from pbft.network import Network
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Blockchain
+
+# Define load_blockchain and save_blockchain functions
+def load_blockchain():
+    if os.path.exists('blockchain.pkl'):
+        with open('blockchain.pkl', 'rb') as f:
+            blockchain = pickle.load(f)
+            blockchain.initialize_pbft_nodes()  # Ensure PBFT nodes are initialized
+    else:
+        blockchain = Blockchain()
+        blockchain.create_genesis_block()
+        save_blockchain(blockchain)
+    return blockchain
+
+def save_blockchain(blockchain):
+    with open('blockchain.pkl', 'wb') as f:
+        pickle.dump(blockchain, f)
+logger.info("Blockchain functions defined.")
+
+# Initialize blockchain
+blockchain = load_blockchain()
+logger.info("Blockchain initialized.")
+
+# Add a new block to the blockchain to ensure there is more than one block
+blockchain.add_block("New Block Data")
+save_blockchain(blockchain)
+logger.info("New block added to blockchain.")
+
+# Function to retrieve and print block details
+def retrieve_and_print_block_details(blockchain, block_hash, block_index):
+    block_by_hash = blockchain.get_block_by_hash(block_hash)
+    block_by_index = blockchain.get_block_by_index(block_index)
+
+    if block_by_hash:
+        logger.info(f"Block by hash: {block_by_hash}")
+    else:
+        logger.info(f"No block found with hash: {block_hash}")
+
+    if block_by_index:
+        logger.info(f"Block by index: {block_by_index}")
+    else:
+        logger.info(f"No block found with index: {block_index}")
+
+# Retrieve and print block details for verification
+latest_block_hash = blockchain.chain[-1].hash  # Retrieve the latest block's hash
+genesis_block_index = 0  # Retrieve the genesis block by index
+retrieve_and_print_block_details(blockchain, latest_block_hash, genesis_block_index)
+
+# Initialize smart contract and record model updates
+clients = []  # Placeholder for clients to be defined later in the Federated Learning section
+smart_contract = SmartContract()
+for client in clients:
+    smart_contract.verify_and_record(client.model.get_weights())
+logger.info("Model updates recorded on blockchain.")
+
+# Print blockchain and smart contract ledger for verification
+blockchain.print_chain()
+smart_contract.print_ledger()
+
+# Evaluation
+
+# Function to calculate evaluation metrics
+def calculate_metrics(y_true, y_pred):
+    cm = confusion_matrix(y_true, y_pred)
+    tp = cm[1, 1]
+    fp = cm[0, 1]
+    fn = cm[1, 0]
+    tn = cm[0, 0]
+
+    recall = recall_score(y_true, y_pred)
+    precision = precision_score(y_true, y_pred)
+    f1 = f1_score(y_true, y_pred)
+
+    return tp, fp, fn, tn, recall, precision, f1
+
+# Validate global models on the validation set of the first client (or any chosen validation set)
+def evaluate_global_models(global_models, client_partitions):
+    X_train, X_test, y_train, y_test = client_partitions[0]
+    predictions = {}
+
+    for model_name, global_model in global_models.items():
+        y_pred = (global_model.predict(X_test) > 0.5).astype("int32")
+        predictions[model_name] = y_pred
+        tp, fp, fn, tn, recall, precision, f1 = calculate_metrics(y_test, y_pred)
+        logger.info(f'{model_name} Validation Metrics: TP={tp}, FP={fp}, FN={fn}, TN={tn}, Recall={recall:.2f}, Precision={precision:.2f}, F1-Score={f1:.2f}')
+
+    return predictions
+
+# Federated Learning
+
 # Create directory for client data if it does not exist
 os.makedirs('data', exist_ok=True)
 logger.info("Directory for client data created.")
@@ -150,37 +240,15 @@ logger.info("Starting hybrid model aggregation.")
 global_model_hybrid = hybrid_aggregate(client_models_data, initial_model)
 logger.info("Hybrid model aggregation completed.")
 
-# Function to calculate evaluation metrics
-def calculate_metrics(y_true, y_pred):
-    cm = confusion_matrix(y_true, y_pred)
-    tp = cm[1, 1]
-    fp = cm[0, 1]
-    fn = cm[1, 0]
-    tn = cm[0, 0]
+# Evaluate global models
+global_models = {
+    'FedAvg': global_model_fedavg,
+    'FedAdam': global_model_fedadam,
+    'Hybrid': global_model_hybrid
+}
+predictions = evaluate_global_models(global_models, client_partitions)
 
-    recall = recall_score(y_true, y_pred)
-    precision = precision_score(y_true, y_pred)
-    f1 = f1_score(y_true, y_pred)
-
-    return tp, fp, fn, tn, recall, precision, f1
-
-# Validate global models on the validation set of the first client (or any chosen validation set)
-X_train, X_test, y_train, y_test = client_partitions[0]
-
-# Evaluate FedAvg model
-y_pred_fedavg = (global_model_fedavg.predict(X_test) > 0.5).astype("int32")
-tp, fp, fn, tn, recall, precision, f1 = calculate_metrics(y_test, y_pred_fedavg)
-logger.info(f'FedAvg Validation Metrics: TP={tp}, FP={fp}, FN={fn}, TN={tn}, Recall={recall:.2f}, Precision={precision:.2f}, F1-Score={f1:.2f}')
-
-# Evaluate FedAdam model
-y_pred_fedadam = (global_model_fedadam.predict(X_test) > 0.5).astype("int32")
-tp, fp, fn, tn, recall, precision, f1 = calculate_metrics(y_test, y_pred_fedadam)
-logger.info(f'FedAdam Validation Metrics: TP={tp}, FP={fp}, FN={fn}, TN={tn}, Recall={recall:.2f}, Precision={precision:.2f}, F1-Score={f1:.2f}')
-
-# Evaluate Hybrid model
-y_pred_hybrid = (global_model_hybrid.predict(X_test) > 0.5).astype("int32")
-tp, fp, fn, tn, recall, precision, f1 = calculate_metrics(y_test, y_pred_hybrid)
-logger.info(f'Hybrid Validation Metrics: TP={tp}, FP={fp}, FN={fn}, TN={tn}, Recall={recall:.2f}, Precision={precision:.2f}, F1-Score={f1:.2f}')
+# Logging and Visualization
 
 # Plot training histories
 plot_dir = 'plots'
@@ -195,12 +263,17 @@ client_accuracies_fedavg = [client.model.evaluate(client_partitions[i][1], clien
 client_accuracies_fedadam = [client.model.evaluate(client_partitions[i][1], client_partitions[i][3])[1] for i, client in enumerate(clients)]
 client_accuracies_hybrid = [client.model.evaluate(client_partitions[i][1], client_partitions[i][3])[1] for i, client in enumerate(clients)]
 
-plot_global_model_performance(global_model_fedavg.evaluate(X_test, y_test)[1], client_accuracies_fedavg, os.path.join(plot_dir, 'global_model_performance_fedavg.png'), title='Global Model vs Client Models Performance (FedAvg)')
-plot_global_model_performance(global_model_fedadam.evaluate(X_test, y_test)[1], client_accuracies_fedadam, os.path.join(plot_dir, 'global_model_performance_fedadam.png'), title='Global Model vs Client Models Performance (FedAdam)')
-plot_global_model_performance(global_model_hybrid.evaluate(X_test, y_test)[1], client_accuracies_hybrid, os.path.join(plot_dir, 'global_model_performance_hybrid.png'), title='Global Model vs Client Models Performance (Hybrid)')
+plot_global_model_performance(global_model_fedavg.evaluate(client_partitions[0][1], client_partitions[0][3])[1], client_accuracies_fedavg, os.path.join(plot_dir, 'global_model_performance_fedavg.png'), title='Global Model vs Client Models Performance (FedAvg)')
+plot_global_model_performance(global_model_fedadam.evaluate(client_partitions[0][1], client_partitions[0][3])[1], client_accuracies_fedadam, os.path.join(plot_dir, 'global_model_performance_fedadam.png'), title='Global Model vs Client Models Performance (FedAdam)')
+plot_global_model_performance(global_model_hybrid.evaluate(client_partitions[0][1], client_partitions[0][3])[1], client_accuracies_hybrid, os.path.join(plot_dir, 'global_model_performance_hybrid.png'), title='Global Model vs Client Models Performance (Hybrid)')
 logger.info("Global model performance plotted.")
 
 # Plot confusion matrices
+y_pred_fedavg = predictions['FedAvg']
+y_pred_fedadam = predictions['FedAdam']
+y_pred_hybrid = predictions['Hybrid']
+X_train, X_test, y_train, y_test = client_partitions[0]
+
 plot_confusion_matrix(y_test, y_pred_fedavg, os.path.join(plot_dir, 'confusion_matrix_fedavg.png'), title='Confusion Matrix (FedAvg)')
 plot_confusion_matrix(y_test, y_pred_fedadam, os.path.join(plot_dir, 'confusion_matrix_fedadam.png'), title='Confusion Matrix (FedAdam)')
 plot_confusion_matrix(y_test, y_pred_hybrid, os.path.join(plot_dir, 'confusion_matrix_hybrid.png'), title='Confusion Matrix (Hybrid)')
@@ -209,83 +282,10 @@ plot_normalized_confusion_matrix(y_test, y_pred_fedadam, os.path.join(plot_dir, 
 plot_normalized_confusion_matrix(y_test, y_pred_hybrid, os.path.join(plot_dir, 'normalized_confusion_matrix_hybrid.png'), title='Normalized Confusion Matrix (Hybrid)')
 logger.info("Confusion matrices plotted.")
 
-# Define load_blockchain and save_blockchain functions
-def load_blockchain():
-    if os.path.exists('blockchain.pkl'):
-        with open('blockchain.pkl', 'rb') as f:
-            blockchain = pickle.load(f)
-            blockchain.initialize_pbft_nodes()  # Ensure PBFT nodes are initialized
-    else:
-        blockchain = Blockchain()
-        blockchain.create_genesis_block()
-        save_blockchain(blockchain)
-    return blockchain
-
-def save_blockchain(blockchain):
-    with open('blockchain.pkl', 'wb') as f:
-        pickle.dump(blockchain, f)
-logger.info("Blockchain functions defined.")
-
-# Blockchain and security steps
-# Initialize blockchain
-blockchain = load_blockchain()
-logger.info("Blockchain initialized.")
-
-# Add a new block to the blockchain to ensure there is more than one block
-blockchain.add_block("New Block Data")
-save_blockchain(blockchain)
-logger.info("New block added to blockchain.")
-
-# Initialize smart contract and record model updates
-smart_contract = SmartContract()
-for client in clients:
-    smart_contract.verify_and_record(client.model.get_weights())
-logger.info("Model updates recorded on blockchain.")
-
-# Print blockchain and smart contract ledger for verification
-blockchain.print_chain()
-smart_contract.print_ledger()
-
-# Function to retrieve and print block details
-def retrieve_and_print_block_details(blockchain, block_hash, block_index):
-    block_by_hash = blockchain.get_block_by_hash(block_hash)
-    block_by_index = blockchain.get_block_by_index(block_index)
-
-    if block_by_hash:
-        logger.info(f"Block by hash: {block_by_hash}")
-    else:
-        logger.info(f"No block found with hash: {block_hash}")
-
-    if block_by_index:
-        logger.info(f"Block by index: {block_by_index}")
-    else:
-        logger.info(f"No block found with index: {block_index}")
-
-# Retrieve and print block details for verification
-latest_block_hash = blockchain.get_latest_block().hash  # Retrieve the latest block's hash
-genesis_block_index = 0  # Retrieve the genesis block by index
-retrieve_and_print_block_details(blockchain, latest_block_hash, genesis_block_index)
-
 # Evaluate the global model again after security enhancements
 y_pred_enhanced = (global_model_fedavg.predict(X_test) > 0.5).astype("int32")
 tp, fp, fn, tn, recall, precision, f1 = calculate_metrics(y_test, y_pred_enhanced)
 logger.info(f'Test Metrics after security enhancements: TP={tp}, FP={fp}, FN={fn}, TN={tn}, Recall={recall:.2f}, Precision={precision:.2f}, F1-Score={f1:.2f}')
-
-# PBFT integration
-# Initialize network and nodes
-network = Network()
-nodes = [PBFTNode(i, network) for i in range(n_clients)]
-logger.info("PBFT network and nodes initialized.")
-
-# Add nodes to network
-for node in nodes:
-    network.add_node(node)
-logger.info("Nodes added to PBFT network.")
-
-# Add blocks using PBFT
-for i in range(n_clients):
-    nodes[i].pre_prepare(f"Client {i+1} data block")
-logger.info("Blocks added using PBFT.")
 
 # Visualizations for security enhancements
 plot_confusion_matrix(y_test, y_pred_enhanced, os.path.join(plot_dir, 'confusion_matrix_enhanced.png'), title='Confusion Matrix (Enhanced)')
@@ -307,3 +307,31 @@ for i, (X_train, X_test, y_train, y_test) in enumerate(client_partitions):
     plot_client_data_distribution(X_train, y_train, feature_indices, os.path.join(plot_dir, f'client_{i+1}_data_distribution.png'), client_id=i+1, title=f'Client {i+1} Data Distribution')
     plot_client_model_performance(histories[i], os.path.join(plot_dir, f'client_{i+1}_model_performance.png'), client_id=i+1, title=f'Client {i+1} Model Performance')
 logger.info("Client data and performance visualizations plotted.")
+
+# PBFT Integration
+
+# Initialize network and nodes
+network = Network()
+nodes = [PBFTNode(i, network) for i in range(n_clients)]
+logger.info("PBFT network and nodes initialized.")
+
+# Add nodes to network
+for node in nodes:
+    network.add_node(node)
+logger.info("Nodes added to PBFT network.")
+
+# Add blocks using PBFT
+for i in range(n_clients):
+    nodes[i].pre_prepare(f"Client {i+1} data block")
+logger.info("Blocks added using PBFT.")
+
+
+# Add this at the end of your main.py
+from visualization import plot_blockchain_visualization, plot_pbft_visualization
+
+# Plot blockchain visualization
+plot_blockchain_visualization(blockchain, os.path.join(plot_dir, 'blockchain_visualization.png'), title='Blockchain Data Over Time')
+
+# Plot PBFT visualization (assuming you have PBFT data to plot)
+pbft_data = [node.state for node in nodes]  # Replace with actual PBFT data
+plot_pbft_visualization(pbft_data, os.path.join(plot_dir, 'pbft_visualization.png'), title='PBFT Node States')
