@@ -16,26 +16,28 @@ class CentralAggregator:
             self.global_model.set_weights(averaged_weights)
         return self.global_model
 
-class FederatedAdamAggregator(CentralAggregator):
-    def aggregate_models(self, client_models_data, method='fedadam', beta_1=0.9, beta_2=0.999, epsilon=1e-8):
-        if method == 'fedadam':
+# New FedProx Aggregator
+class FedProxAggregator(CentralAggregator):
+    def __init__(self, global_model, mu=0.1):
+        super().__init__(global_model)
+        self.mu = mu  # Proximal term
+
+    def aggregate_models(self, client_models_data, method='fedprox'):
+        if method == 'fedprox':
             num_clients = len(client_models_data)
+            global_weights = self.global_model.get_weights()
             client_weights = [client['model'].get_weights() for client in client_models_data]
 
-            aggregated_weights = []
-            m = [0] * len(client_weights[0])
-            v = [0] * len(client_weights[0])
+            # Aggregate the models with FedProx logic
+            prox_weights = []
+            for client_w in client_weights:
+                prox_client_w = [(client_w[i] + self.mu * global_weights[i]) / (1 + self.mu)
+                                 for i in range(len(client_w))]
+                prox_weights.append(prox_client_w)
 
-            for weights in zip(*client_weights):
-                weight_sum = np.sum(weights, axis=0)
-                aggregated_weights.append(weight_sum / num_clients)
+            averaged_weights = []
+            for weights in zip(*prox_weights):
+                averaged_weights.append(np.mean(weights, axis=0))
 
-            for i, weight in enumerate(aggregated_weights):
-                m[i] = beta_1 * m[i] + (1 - beta_1) * weight
-                v[i] = beta_2 * v[i] + (1 - beta_2) * (weight ** 2)
-                m_hat = m[i] / (1 - beta_1)
-                v_hat = v[i] / (1 - beta_2)
-                aggregated_weights[i] = m_hat / (np.sqrt(v_hat) + epsilon)
-
-            self.global_model.set_weights(aggregated_weights)
+            self.global_model.set_weights(averaged_weights)
         return self.global_model
