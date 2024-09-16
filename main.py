@@ -1,16 +1,16 @@
 import logging
 import os
-import pickle
+import pickle 
 import numpy as np
 import tensorflow as tf
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense, Input, Dropout
 from tensorflow.keras.callbacks import EarlyStopping
-from sklearn.metrics import confusion_matrix, recall_score, precision_score, f1_score
+from sklearn.metrics import confusion_matrix, recall_score, precision_score, f1_score, roc_auc_score, roc_curve, precision_recall_curve
 
 from utils.data_preprocessing import load_and_preprocess_data, partition_data_for_clients, prepare_client_data
 from federated_learning.client import FederatedClient
-from federated_learning.aggregator import CentralAggregator
+from federated_learning.aggregator import CentralAggregator, FedProxAggregator  # Import FedProx
 from blockchain.blockchain import Blockchain
 from blockchain.smart_contract import SmartContract
 from security.anomaly_detection import AnomalyDetection
@@ -18,7 +18,10 @@ from security.adversarial_training import AdversarialTraining
 from visualization import (plot_training_history, plot_global_model_performance, 
                            plot_confusion_matrix, plot_normalized_confusion_matrix, 
                            plot_feature_distribution, plot_anomaly_detection, 
-                           plot_client_data_distribution, plot_client_model_performance)
+                           plot_client_data_distribution, plot_client_model_performance,
+                           plot_algorithm_performance, plot_metrics,
+                           plot_roc_curve, plot_precision_recall_curve,
+                           plot_accuracy_loss)  # Added plot_accuracy_loss
 
 from pbft.pbft_node import PBFTNode
 from pbft.network import Network
@@ -99,21 +102,24 @@ def calculate_metrics(y_true, y_pred):
     recall = recall_score(y_true, y_pred)
     precision = precision_score(y_true, y_pred)
     f1 = f1_score(y_true, y_pred)
+    auc = roc_auc_score(y_true, y_pred)
 
-    return tp, fp, fn, tn, recall, precision, f1
+    return tp, fp, fn, tn, recall, precision, f1, auc
 
 # Validate global models on the validation set of the first client (or any chosen validation set)
 def evaluate_global_models(global_models, client_partitions):
     X_train, X_test, y_train, y_test = client_partitions[0]
     predictions = {}
+    metrics_dict = {}
 
     for model_name, global_model in global_models.items():
         y_pred = (global_model.predict(X_test) > 0.5).astype("int32")
         predictions[model_name] = y_pred
-        tp, fp, fn, tn, recall, precision, f1 = calculate_metrics(y_test, y_pred)
-        logger.info(f'{model_name} Validation Metrics: TP={tp}, FP={fp}, FN={fn}, TN={tn}, Recall={recall:.2f}, Precision={precision:.2f}, F1-Score={f1:.2f}')
+        tp, fp, fn, tn, recall, precision, f1, auc = calculate_metrics(y_test, y_pred)
+        logger.info(f'{model_name} Validation Metrics: TP={tp}, FP={fp}, FN={fn}, TN={tn}, Recall={recall:.2f}, Precision={precision:.2f}, F1-Score={f1:.2f}, AUC={auc:.2f}')
+        metrics_dict[model_name] = {'TP': tp, 'FP': fp, 'FN': fn, 'TN': tn, 'Recall': recall, 'Precision': precision, 'F1-Score': f1, 'AUC': auc}
 
-    return predictions
+    return predictions, metrics_dict
 
 # Federated Learning
 
@@ -139,8 +145,8 @@ logger.info("Client-specific datasets saved.")
 client_partitions = prepare_client_data(client_data)
 logger.info("Client-specific datasets prepared.")
 
-# Define a simple model
-def create_model(input_shape):
+# Define a simple model with manual DP
+def create_model(input_shape, learning_rate=0.001, l2_norm_clip=1.0, noise_multiplier=0.1):
     model = Sequential([
         Input(shape=(input_shape,)),
         Dense(64, activation='relu'),
@@ -149,8 +155,33 @@ def create_model(input_shape):
         Dropout(0.5),
         Dense(1, activation='sigmoid')
     ])
-    model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
+
+    optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)
+
+    @tf.function
+    def train_step(x, y):
+        with tf.GradientTape() as tape:
+            predictions = model(x, training=True)
+            loss = tf.keras.losses.binary_crossentropy(y, predictions)
+        gradients = tape.gradient(loss, model.trainable_variables)
+
+        gradients = [tf.clip_by_norm(grad, l2_norm_clip) for grad in gradients]
+        noise_stddev = noise_multiplier * l2_norm_clip
+        noisy_gradients = [grad + tf.random.normal(tf.shape(grad), stddev=noise_stddev) for grad in gradients]
+
+        optimizer.apply_gradients(zip(noisy_gradients, model.trainable_variables))
+        return loss
+
+    def fit_step(x, y):
+        loss = train_step(x, y)
+        return {"loss": loss}
+
+    # Compile the model with a dummy loss and metric
+    model.compile(optimizer=optimizer, loss='binary_crossentropy', metrics=['accuracy'])
+
+    model.fit_step = fit_step  # Assign custom fit step
     return model
+
 
 # Initialize federated learning clients
 clients = [FederatedClient((X_train, y_train), create_model(X_train.shape[1])) for (X_train, X_test, y_train, y_test) in client_partitions]
@@ -163,10 +194,15 @@ histories = []
 for client_id, client in enumerate(clients):
     X_train, X_test, y_train, y_test = client_partitions[client_id]
     logger.info(f"Training client {client_id + 1}")
-    history = client.train_local_model(epochs=10, callbacks=[early_stopping], validation_data=(X_test, y_test))
+    history = client.train_local_model(epochs=20, callbacks=[early_stopping], validation_data=(X_test, y_test))
     histories.append(history)
     logger.info(f"Client {client_id + 1} training completed.")
-
+    
+# Plot accuracy and loss for this client
+plot_dir = 'plots'
+os.makedirs(plot_dir, exist_ok=True)
+plot_accuracy_loss(history, title=f"Client {client_id + 1} Accuracy and Loss", save_path=os.path.join(plot_dir, f'client_{client_id + 1}_accuracy_loss.png'))
+""
 # Apply anomaly detection and adversarial training
 anomaly_detection = AnomalyDetection()
 anomaly_detection.train(X_train)
@@ -188,36 +224,11 @@ logger.info("Starting model aggregation using FedAvg.")
 global_model_fedavg = aggregator_fedavg.aggregate_models(client_models_data, method='fedavg')
 logger.info("Model aggregation using FedAvg completed.")
 
-# FedAdam Aggregator
-class FederatedAdamAggregator(CentralAggregator):
-    def aggregate_models(self, client_models_data, method='fedadam', beta_1=0.9, beta_2=0.999, epsilon=1e-8):
-        if method == 'fedadam':
-            num_clients = len(client_models_data)
-            client_weights = [client['model'].get_weights() for client in client_models_data]
-
-            aggregated_weights = []
-            m = [0] * len(client_weights[0])
-            v = [0] * len(client_weights[0])
-
-            for weights in zip(*client_weights):
-                weight_sum = np.sum(weights, axis=0)
-                aggregated_weights.append(weight_sum / num_clients)
-
-            for i, weight in enumerate(aggregated_weights):
-                m[i] = beta_1 * m[i] + (1 - beta_1) * weight
-                v[i] = beta_2 * v[i] + (1 - beta_2) * (weight ** 2)
-                m_hat = m[i] / (1 - beta_1)
-                v_hat = v[i] / (1 - beta_2)
-                aggregated_weights[i] = m_hat / (np.sqrt(v_hat) + epsilon)
-
-            self.global_model.set_weights(aggregated_weights)
-        return self.global_model
-
-# Use FederatedAdamAggregator for aggregation
-aggregator_fedadam = FederatedAdamAggregator(create_model(X_train.shape[1]))
-logger.info("Starting model aggregation using FedAdam.")
-global_model_fedadam = aggregator_fedadam.aggregate_models(client_models_data, method='fedadam')
-logger.info("Model aggregation using FedAdam completed.")
+# Replace FedAdam Aggregator with FedProx
+aggregator_fedprox = FedProxAggregator(create_model(X_train.shape[1]), mu=0.1)
+logger.info("Starting model aggregation using FedProx.")
+global_model_fedprox = aggregator_fedprox.aggregate_models(client_models_data, method='fedprox')
+logger.info("Model aggregation using FedProx completed.")
 
 # Hybrid Model Aggregation
 def hybrid_aggregate(client_models_data, initial_model, iterations=3):
@@ -225,67 +236,88 @@ def hybrid_aggregate(client_models_data, initial_model, iterations=3):
     aggregator_fedavg = CentralAggregator(initial_model)
     global_model = aggregator_fedavg.aggregate_models(client_models_data, method='fedavg')
     
-    # Perform alternating FedAdam and FedAvg
+    # Perform alternating FedProx and FedAvg
     for _ in range(iterations):
-        aggregator_fedadam = FederatedAdamAggregator(global_model)
-        global_model = aggregator_fedadam.aggregate_models(client_models_data, method='fedadam')
+        aggregator_fedprox = FedProxAggregator(global_model, mu=0.1)
+        global_model = aggregator_fedprox.aggregate_models(client_models_data, method='fedprox')
         aggregator_fedavg = CentralAggregator(global_model)
         global_model = aggregator_fedavg.aggregate_models(client_models_data, method='fedavg')
     
     return global_model
 
-# Perform hybrid aggregation
+# Perform hybrid aggregation with FedAvg and FedProx
 initial_model = create_model(X_train.shape[1])
 logger.info("Starting hybrid model aggregation.")
 global_model_hybrid = hybrid_aggregate(client_models_data, initial_model)
 logger.info("Hybrid model aggregation completed.")
 
-# Evaluate global models
+# Evaluation of global models with FedAvg, FedProx, and Hybrid
 global_models = {
     'FedAvg': global_model_fedavg,
-    'FedAdam': global_model_fedadam,
+    'FedProx': global_model_fedprox,  # Replacing FedAdam with FedProx
     'Hybrid': global_model_hybrid
 }
-predictions = evaluate_global_models(global_models, client_partitions)
-
+predictions, metrics_dict = evaluate_global_models(global_models, client_partitions)
 # Logging and Visualization
 
 # Plot training histories
-plot_dir = 'plots'
+plot_dir = 'plots'  
 os.makedirs(plot_dir, exist_ok=True)
 logger.info("Plot directory created.")
 for i, history in enumerate(histories):
     plot_training_history([history], os.path.join(plot_dir, f'client_{i+1}_training_history.png'), title=f'Client {i+1} Training History')
 logger.info("Training histories plotted.")
 
+# Plot overall accuracy and loss for all clients
+plot_accuracy_loss(
+    history,  # history from the training
+    title=f"Client {client_id + 1} Accuracy and Loss",  # The title of the plot
+    save_path=os.path.join(plot_dir, f'client_{client_id + 1}_accuracy_loss.png')  # Provide a file path for saving the plot
+)
+logger.info("Overall accuracy and loss plotted.")
+
 # Plot global model performance
 client_accuracies_fedavg = [client.model.evaluate(client_partitions[i][1], client_partitions[i][3])[1] for i, client in enumerate(clients)]
-client_accuracies_fedadam = [client.model.evaluate(client_partitions[i][1], client_partitions[i][3])[1] for i, client in enumerate(clients)]
+client_accuracies_fedprox = [client.model.evaluate(client_partitions[i][1], client_partitions[i][3])[1] for i, client in enumerate(clients)]
 client_accuracies_hybrid = [client.model.evaluate(client_partitions[i][1], client_partitions[i][3])[1] for i, client in enumerate(clients)]
 
 plot_global_model_performance(global_model_fedavg.evaluate(client_partitions[0][1], client_partitions[0][3])[1], client_accuracies_fedavg, os.path.join(plot_dir, 'global_model_performance_fedavg.png'), title='Global Model vs Client Models Performance (FedAvg)')
-plot_global_model_performance(global_model_fedadam.evaluate(client_partitions[0][1], client_partitions[0][3])[1], client_accuracies_fedadam, os.path.join(plot_dir, 'global_model_performance_fedadam.png'), title='Global Model vs Client Models Performance (FedAdam)')
+plot_global_model_performance(global_model_fedprox.evaluate(client_partitions[0][1], client_partitions[0][3])[1], client_accuracies_fedprox, os.path.join(plot_dir, 'global_model_performance_fedprox.png'), title='Global Model vs Client Models Performance (FedProx)')
 plot_global_model_performance(global_model_hybrid.evaluate(client_partitions[0][1], client_partitions[0][3])[1], client_accuracies_hybrid, os.path.join(plot_dir, 'global_model_performance_hybrid.png'), title='Global Model vs Client Models Performance (Hybrid)')
 logger.info("Global model performance plotted.")
 
 # Plot confusion matrices
 y_pred_fedavg = predictions['FedAvg']
-y_pred_fedadam = predictions['FedAdam']
+y_pred_fedprox = predictions['FedProx']
 y_pred_hybrid = predictions['Hybrid']
 X_train, X_test, y_train, y_test = client_partitions[0]
 
 plot_confusion_matrix(y_test, y_pred_fedavg, os.path.join(plot_dir, 'confusion_matrix_fedavg.png'), title='Confusion Matrix (FedAvg)')
-plot_confusion_matrix(y_test, y_pred_fedadam, os.path.join(plot_dir, 'confusion_matrix_fedadam.png'), title='Confusion Matrix (FedAdam)')
+plot_confusion_matrix(y_test, y_pred_fedprox, os.path.join(plot_dir, 'confusion_matrix_fedprox.png'), title='Confusion Matrix (FedProx)')
 plot_confusion_matrix(y_test, y_pred_hybrid, os.path.join(plot_dir, 'confusion_matrix_hybrid.png'), title='Confusion Matrix (Hybrid)')
 plot_normalized_confusion_matrix(y_test, y_pred_fedavg, os.path.join(plot_dir, 'normalized_confusion_matrix_fedavg.png'), title='Normalized Confusion Matrix (FedAvg)')
-plot_normalized_confusion_matrix(y_test, y_pred_fedadam, os.path.join(plot_dir, 'normalized_confusion_matrix_fedadam.png'), title='Normalized Confusion Matrix (FedAdam)')
+plot_normalized_confusion_matrix(y_test, y_pred_fedprox, os.path.join(plot_dir, 'normalized_confusion_matrix_fedprox.png'), title='Normalized Confusion Matrix (FedProx)')
 plot_normalized_confusion_matrix(y_test, y_pred_hybrid, os.path.join(plot_dir, 'normalized_confusion_matrix_hybrid.png'), title='Normalized Confusion Matrix (Hybrid)')
 logger.info("Confusion matrices plotted.")
 
+# Plot metrics for each model
+plot_metrics(metrics_dict, os.path.join(plot_dir, 'metrics_comparison.png'), title='Metrics Comparison for Global Models')
+logger.info("Metrics comparison plotted.")
+
+# Plot ROC curves for each model
+for model_name, y_pred in predictions.items():
+    plot_roc_curve(y_test, y_pred, os.path.join(plot_dir, f'roc_curve_{model_name}.png'), title=f'ROC Curve - {model_name}')
+logger.info("ROC curves plotted.")
+
+# Plot Precision-Recall curves for each model
+for model_name, y_pred in predictions.items():
+    plot_precision_recall_curve(y_test, y_pred, os.path.join(plot_dir, f'precision_recall_curve_{model_name}.png'), title=f'Precision-Recall Curve - {model_name}')
+logger.info("Precision-Recall curves plotted.")
+
 # Evaluate the global model again after security enhancements
 y_pred_enhanced = (global_model_fedavg.predict(X_test) > 0.5).astype("int32")
-tp, fp, fn, tn, recall, precision, f1 = calculate_metrics(y_test, y_pred_enhanced)
-logger.info(f'Test Metrics after security enhancements: TP={tp}, FP={fp}, FN={fn}, TN={tn}, Recall={recall:.2f}, Precision={precision:.2f}, F1-Score={f1:.2f}')
+tp, fp, fn, tn, recall, precision, f1, auc = calculate_metrics(y_test, y_pred_enhanced)
+logger.info(f'Test Metrics after security enhancements: TP={tp}, FP={fp}, FN={fn}, TN={tn}, Recall={recall:.2f}, Precision={precision:.2f}, F1-Score={f1:.2f}, AUC={auc:.2f}')
 
 # Visualizations for security enhancements
 plot_confusion_matrix(y_test, y_pred_enhanced, os.path.join(plot_dir, 'confusion_matrix_enhanced.png'), title='Confusion Matrix (Enhanced)')
@@ -325,7 +357,6 @@ for i in range(n_clients):
     nodes[i].pre_prepare(f"Client {i+1} data block")
 logger.info("Blocks added using PBFT.")
 
-
 # Add this at the end of your main.py
 from visualization import plot_blockchain_visualization, plot_pbft_visualization
 
@@ -335,3 +366,9 @@ plot_blockchain_visualization(blockchain, os.path.join(plot_dir, 'blockchain_vis
 # Plot PBFT visualization (assuming you have PBFT data to plot)
 pbft_data = [node.state for node in nodes]  # Replace with actual PBFT data
 plot_pbft_visualization(pbft_data, os.path.join(plot_dir, 'pbft_visualization.png'), title='PBFT Node States')
+
+# Plot Algorithm performance comparison
+plot_algorithm_performance("FedAvg", global_model_fedavg.evaluate(client_partitions[0][1], client_partitions[0][3])[1], client_accuracies_fedavg, os.path.join(plot_dir, 'algorithm_performance_fedavg.png'))
+plot_algorithm_performance("FedProx", global_model_fedprox.evaluate(client_partitions[0][1], client_partitions[0][3])[1], client_accuracies_fedprox, os.path.join(plot_dir, 'algorithm_performance_fedprox.png'))
+plot_algorithm_performance("Hybrid", global_model_hybrid.evaluate(client_partitions[0][1], client_partitions[0][3])[1], client_accuracies_hybrid, os.path.join(plot_dir, 'algorithm_performance_hybrid.png'))
+logger.info("Algorithm performance comparisons plotted.")

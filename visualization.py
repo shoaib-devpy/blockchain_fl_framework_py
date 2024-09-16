@@ -1,7 +1,8 @@
 import matplotlib.pyplot as plt
+import os
 import seaborn as sns
 import numpy as np
-from sklearn.metrics import confusion_matrix
+from sklearn.metrics import confusion_matrix, roc_curve, auc, precision_recall_curve
 from sklearn.preprocessing import StandardScaler
 
 def plot_training_history(histories, filename, title):
@@ -147,3 +148,91 @@ def plot_algorithm_performance(algorithm_name, global_accuracy, client_accuracie
     plt.legend()
     plt.savefig(save_path)
     plt.close()
+
+def plot_metrics(metrics_dict, save_path, title):
+    model_names = list(metrics_dict.keys())
+    metrics = ['TP', 'FP', 'FN', 'TN', 'Recall', 'Precision', 'F1-Score', 'AUC']
+
+    # Plot each metric
+    for metric in metrics:
+        plt.figure(figsize=(10, 7))
+        values = [metrics_dict[model][metric] for model in model_names]
+        plt.bar(model_names, values)
+        plt.title(f'{metric} Comparison - {title}')
+        plt.xlabel('Model')
+        plt.ylabel(metric)
+        plt.savefig(save_path.replace('.png', f'_{metric.lower()}.png'))
+        plt.close()
+
+def plot_roc_curve(y_true, y_pred, save_path, title):
+    fpr, tpr, _ = roc_curve(y_true, y_pred)
+    plt.figure()
+    plt.plot(fpr, tpr, label=f'AUC = {auc(fpr, tpr):.2f}')
+    plt.plot([0, 1], [0, 1], color='navy', linestyle='--')
+    plt.xlim([0.0, 1.0])
+    plt.ylim([0.0, 1.05])
+    plt.xlabel('False Positive Rate')
+    plt.ylabel('True Positive Rate')
+    plt.title(title)
+    plt.legend(loc="lower right")
+    plt.savefig(save_path)
+    plt.close()
+
+def plot_precision_recall_curve(y_true, y_pred, save_path, title):
+    precision, recall, _ = precision_recall_curve(y_true, y_pred)
+    plt.figure()
+    plt.plot(recall, precision, label=f'Precision-Recall Curve')
+    plt.xlabel('Recall')
+    plt.ylabel('Precision')
+    plt.title(title)
+    plt.legend(loc="lower left")
+    plt.savefig(save_path)
+    plt.close()
+
+# New function to plot overall accuracy and loss
+def plot_accuracy_loss(history, save_path, title):
+    # Check if history is a list (multiple histories)
+    if isinstance(history, list):
+        plt.figure()
+        for i, hist in enumerate(history):
+            plt.plot(hist.history['accuracy'], label=f'Client {i+1} Training Accuracy')
+            plt.plot(hist.history['val_accuracy'], label=f'Client {i+1} Validation Accuracy')
+        plt.title(f'{title} - Accuracy')
+        plt.ylabel('Accuracy')
+        plt.xlabel('Epoch')
+        plt.legend(loc='upper left')
+        plt.savefig(save_path.replace('.png', '_accuracy.png'))
+        plt.close()
+
+        plt.figure()
+        for i, hist in enumerate(history):
+            plt.plot(hist.history['loss'], label=f'Client {i+1} Training Loss')
+            plt.plot(hist.history['val_loss'], label=f'Client {i+1} Validation Loss')
+        plt.title(f'{title} - Loss')
+        plt.ylabel('Loss')
+        plt.xlabel('Epoch')
+        plt.legend(loc='upper left')
+        plt.savefig(save_path.replace('.png', '_loss.png'))
+        plt.close()
+
+    # If it's a single history object
+    else:
+        plt.figure()
+        plt.plot(history.history['accuracy'], label='Training Accuracy')
+        plt.plot(history.history['val_accuracy'], label='Validation Accuracy')
+        plt.title(f'{title} - Accuracy')
+        plt.ylabel('Accuracy')
+        plt.xlabel('Epoch')
+        plt.legend(loc='upper left')
+        plt.savefig(save_path.replace('.png', '_accuracy.png'))
+        plt.close()
+
+        plt.figure()
+        plt.plot(history.history['loss'], label='Training Loss')
+        plt.plot(history.history['val_loss'], label='Validation Loss')
+        plt.title(f'{title} - Loss')
+        plt.ylabel('Loss')
+        plt.xlabel('Epoch')
+        plt.legend(loc='upper left')
+        plt.savefig(save_path.replace('.png', '_loss.png'))
+        plt.close()
