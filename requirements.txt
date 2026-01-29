@@ -3,7 +3,7 @@ scikit-learn
 tensorflow
 py-solc-x
 web3
-matlibplotpip 
-NumPy
-scikit-learn
+matplotlib
+numpy
 seaborn
+kagglehub
